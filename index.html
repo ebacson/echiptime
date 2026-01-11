@@ -216,7 +216,6 @@
         </div>
 
         <div id="race-14" class="tab-content active">
-            <div id="stats-14" class="stats"></div>
             <div class="table-container">
                 <div id="loading-14" class="loading">Đang tải dữ liệu...</div>
                 <div id="error-14" class="error" style="display: none;"></div>
@@ -225,7 +224,6 @@
         </div>
 
         <div id="race-3" class="tab-content">
-            <div id="stats-3" class="stats"></div>
             <div class="table-container">
                 <div id="loading-3" class="loading">Đang tải dữ liệu...</div>
                 <div id="error-3" class="error" style="display: none;"></div>
@@ -247,27 +245,6 @@
             // Show selected tab
             document.getElementById(tabId).classList.add('active');
             event.target.classList.add('active');
-        }
-
-        function displayStats(data, statsId) {
-            const statsDiv = document.getElementById(statsId);
-            if (!data || data.length === 0) return;
-
-            const totalParticipants = data.length;
-            const stats = {
-                'Tổng số VĐV': totalParticipants,
-                'VĐV hoàn thành': data.filter(row => {
-                    const time = row.find(cell => cell && cell.toString().includes(':'));
-                    return time;
-                }).length
-            };
-
-            statsDiv.innerHTML = Object.entries(stats).map(([label, value]) => `
-                <div class="stat-card">
-                    <h3>${label}</h3>
-                    <div class="value">${value}</div>
-                </div>
-            `).join('');
         }
 
         function createTable(data, tableId) {
@@ -317,7 +294,7 @@
             document.getElementById(tableId).innerHTML = html;
         }
 
-        function loadExcelFile(filename, loadingId, errorId, tableId, statsId) {
+        function loadExcelFile(filename, loadingId, errorId, tableId) {
             const loadingDiv = document.getElementById(loadingId);
             const errorDiv = document.getElementById(errorId);
             const tableDiv = document.getElementById(tableId);
@@ -338,7 +315,6 @@
                     loadingDiv.style.display = 'none';
                     errorDiv.style.display = 'none';
                     
-                    displayStats(jsonData, statsId);
                     createTable(jsonData, tableId);
                 })
                 .catch(error => {
@@ -351,8 +327,8 @@
 
         // Load both files when page loads
         window.addEventListener('DOMContentLoaded', () => {
-            loadExcelFile('Results_14.4KM.xlsx', 'loading-14', 'error-14', 'table-14', 'stats-14');
-            loadExcelFile('Results_3.6KM.xlsx', 'loading-3', 'error-3', 'table-3', 'stats-3');
+            loadExcelFile('Results_14.4KM.xlsx', 'loading-14', 'error-14', 'table-14');
+            loadExcelFile('Results_3.6KM.xlsx', 'loading-3', 'error-3', 'table-3');
         });
     </script>
 </body>

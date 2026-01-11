@@ -276,22 +276,39 @@
                 return;
             }
 
-            let html = '<table><thead><tr>';
+            // Find columns to hide (Age and Distance)
+            const columnsToHide = ['Age', 'age', 'AGE', 'Distance', 'distance', 'DISTANCE'];
+            const hideIndices = [];
             
-            // Create header row
             if (data[0]) {
                 data[0].forEach((cell, index) => {
-                    html += `<th>${cell || `Cột ${index + 1}`}</th>`;
+                    const cellStr = String(cell || '').trim();
+                    if (columnsToHide.includes(cellStr)) {
+                        hideIndices.push(index);
+                    }
+                });
+            }
+
+            let html = '<table><thead><tr>';
+            
+            // Create header row (skip hidden columns)
+            if (data[0]) {
+                data[0].forEach((cell, index) => {
+                    if (!hideIndices.includes(index)) {
+                        html += `<th>${cell || `Cột ${index + 1}`}</th>`;
+                    }
                 });
                 html += '</tr></thead><tbody>';
             }
 
-            // Create data rows
+            // Create data rows (skip hidden columns)
             for (let i = 1; i < data.length; i++) {
                 html += '<tr>';
-                data[i].forEach(cell => {
-                    const cellValue = cell !== null && cell !== undefined ? cell : '';
-                    html += `<td>${cellValue}</td>`;
+                data[i].forEach((cell, index) => {
+                    if (!hideIndices.includes(index)) {
+                        const cellValue = cell !== null && cell !== undefined ? cell : '';
+                        html += `<td>${cellValue}</td>`;
+                    }
                 });
                 html += '</tr>';
             }

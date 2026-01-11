@@ -247,6 +247,22 @@
             event.target.classList.add('active');
         }
 
+        function timeToSeconds(timeStr) {
+            if (!timeStr) return Infinity;
+            const str = String(timeStr).trim();
+            
+            // Format: HH:MM:SS or MM:SS
+            const parts = str.split(':');
+            if (parts.length === 2) {
+                // MM:SS
+                return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+            } else if (parts.length === 3) {
+                // HH:MM:SS
+                return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+            }
+            return Infinity;
+        }
+
         function createTable(data, tableId) {
             if (!data || data.length === 0) {
                 document.getElementById(tableId).innerHTML = '<p style="text-align: center; padding: 20px;">Không có dữ liệu</p>';
@@ -256,6 +272,7 @@
             // Find columns to hide (Age and TagID)
             const columnsToHide = ['Age', 'age', 'AGE', 'TagID', 'tagid', 'TAGID', 'Tag Id', 'tag id', 'TAG ID'];
             const hideIndices = [];
+            let chiptimeIndex = -1;
             
             if (data[0]) {
                 data[0].forEach((cell, index) => {
@@ -263,10 +280,27 @@
                     if (columnsToHide.includes(cellStr)) {
                         hideIndices.push(index);
                     }
+                    // Find chiptime column (case insensitive)
+                    if (cellStr.toLowerCase().includes('chiptime') || cellStr.toLowerCase().includes('chip time')) {
+                        chiptimeIndex = index;
+                    }
                 });
             }
 
+            // Sort data by chiptime if column found
+            if (chiptimeIndex >= 0 && data.length > 1) {
+                const sortedData = [data[0], ...data.slice(1).sort((a, b) => {
+                    const timeA = timeToSeconds(a[chiptimeIndex]);
+                    const timeB = timeToSeconds(b[chiptimeIndex]);
+                    return timeA - timeB;
+                })];
+                data = sortedData;
+            }
+
             let html = '<table><thead><tr>';
+            
+            // Add ranking column header first
+            html += '<th>Xếp hạng</th>';
             
             // Create header row (skip hidden columns)
             if (data[0]) {
@@ -281,6 +315,9 @@
             // Create data rows (skip hidden columns)
             for (let i = 1; i < data.length; i++) {
                 html += '<tr>';
+                // Add ranking number
+                html += `<td style="text-align: center; font-weight: bold;">${i}</td>`;
+                
                 data[i].forEach((cell, index) => {
                     if (!hideIndices.includes(index)) {
                         const cellValue = cell !== null && cell !== undefined ? cell : '';

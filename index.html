@@ -83,6 +83,44 @@
             display: block;
         }
 
+        .sub-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .sub-tab-button {
+            padding: 10px 25px;
+            background: rgba(255, 255, 255, 0.15);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            color: white;
+            cursor: pointer;
+            border-radius: 20px;
+            font-size: 1em;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .sub-tab-button:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: translateY(-2px);
+        }
+
+        .sub-tab-button.active {
+            background: white;
+            color: #667eea;
+            border-color: white;
+        }
+
+        .sub-tab-content {
+            display: none;
+        }
+
+        .sub-tab-content.active {
+            display: block;
+        }
+
         .table-container {
             background: white;
             border-radius: 15px;
@@ -256,10 +294,34 @@
         </div>
 
         <div id="race-3" class="tab-content">
-            <div class="table-container">
-                <div id="loading-3" class="loading">Đang tải dữ liệu...</div>
-                <div id="error-3" class="error" style="display: none;"></div>
-                <div id="table-3"></div>
+            <div class="sub-tabs">
+                <button class="sub-tab-button active" onclick="showSubTab('overall-3')">Overall</button>
+                <button class="sub-tab-button" onclick="showSubTab('female-3')">Female</button>
+                <button class="sub-tab-button" onclick="showSubTab('male-3')">Male</button>
+            </div>
+            
+            <div id="overall-3" class="sub-tab-content active">
+                <div class="table-container">
+                    <div id="loading-3-overall" class="loading">Đang tải dữ liệu...</div>
+                    <div id="error-3-overall" class="error" style="display: none;"></div>
+                    <div id="table-3-overall"></div>
+                </div>
+            </div>
+            
+            <div id="female-3" class="sub-tab-content">
+                <div class="table-container">
+                    <div id="loading-3-female" class="loading">Đang tải dữ liệu...</div>
+                    <div id="error-3-female" class="error" style="display: none;"></div>
+                    <div id="table-3-female"></div>
+                </div>
+            </div>
+            
+            <div id="male-3" class="sub-tab-content">
+                <div class="table-container">
+                    <div id="loading-3-male" class="loading">Đang tải dữ liệu...</div>
+                    <div id="error-3-male" class="error" style="display: none;"></div>
+                    <div id="table-3-male"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -279,6 +341,23 @@
             event.target.classList.add('active');
         }
 
+        function showSubTab(subTabId) {
+            // Hide all sub-tabs in current parent tab
+            const parentTab = event.target.closest('.tab-content');
+            if (parentTab) {
+                parentTab.querySelectorAll('.sub-tab-content').forEach(tab => {
+                    tab.classList.remove('active');
+                });
+                parentTab.querySelectorAll('.sub-tab-button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+            }
+
+            // Show selected sub-tab
+            document.getElementById(subTabId).classList.add('active');
+            event.target.classList.add('active');
+        }
+
         function timeToSeconds(timeStr) {
             if (!timeStr) return Infinity;
             const str = String(timeStr).trim();
@@ -295,7 +374,46 @@
             return Infinity;
         }
 
-        function createTable(data, tableId) {
+        function filterDataByGender(data, genderFilter) {
+            if (!data || data.length === 0 || genderFilter === 'Overall') {
+                return data;
+            }
+
+            // Find gender column
+            let genderIndex = -1;
+            if (data[0]) {
+                data[0].forEach((cell, index) => {
+                    const cellStr = String(cell || '').trim().toLowerCase();
+                    if (cellStr === 'gen' || cellStr === 'gender' || cellStr.includes('gen')) {
+                        genderIndex = index;
+                    }
+                });
+            }
+
+            if (genderIndex === -1) {
+                return data; // If no gender column found, return all data
+            }
+
+            // Filter data
+            const filteredData = [data[0]]; // Keep header
+            const targetGender = genderFilter.toLowerCase();
+            
+            for (let i = 1; i < data.length; i++) {
+                const cellValue = String(data[i][genderIndex] || '').trim().toLowerCase();
+                if (cellValue === targetGender || 
+                    (targetGender === 'female' && (cellValue === 'f' || cellValue === 'nữ')) ||
+                    (targetGender === 'male' && (cellValue === 'm' || cellValue === 'nam'))) {
+                    filteredData.push(data[i]);
+                }
+            }
+
+            return filteredData;
+        }
+
+        function createTable(data, tableId, genderFilter = 'Overall') {
+            // Filter data by gender if needed
+            data = filterDataByGender(data, genderFilter);
+            
             if (!data || data.length === 0) {
                 document.getElementById(tableId).innerHTML = '<p style="text-align: center; padding: 20px;">Không có dữ liệu</p>';
                 return;
@@ -422,7 +540,7 @@
             }
         }
 
-        function loadExcelFile(filename, loadingId, errorId, tableId) {
+        function loadExcelFile(filename, loadingId, errorId, tableId, genderFilter = 'Overall') {
             const loadingDiv = document.getElementById(loadingId);
             const errorDiv = document.getElementById(errorId);
             const tableDiv = document.getElementById(tableId);
@@ -443,7 +561,7 @@
                     loadingDiv.style.display = 'none';
                     errorDiv.style.display = 'none';
                     
-                    createTable(jsonData, tableId);
+                    createTable(jsonData, tableId, genderFilter);
                 })
                 .catch(error => {
                     loadingDiv.style.display = 'none';
@@ -453,10 +571,43 @@
                 });
         }
 
+        // Store data for filtering
+        let race3Data = null;
+
         // Load both files when page loads
         window.addEventListener('DOMContentLoaded', () => {
             loadExcelFile('Results_14.4KM.xlsx', 'loading-14', 'error-14', 'table-14');
-            loadExcelFile('Results_3.6KM.xlsx', 'loading-3', 'error-3', 'table-3');
+            
+            // Load 3.6KM file and create all three views
+            fetch('Results_3.6KM.xlsx')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Không thể tải file: Results_3.6KM.xlsx');
+                    }
+                    return response.arrayBuffer();
+                })
+                .then(data => {
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    race3Data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+
+                    // Create all three views
+                    document.getElementById('loading-3-overall').style.display = 'none';
+                    document.getElementById('loading-3-female').style.display = 'none';
+                    document.getElementById('loading-3-male').style.display = 'none';
+                    
+                    createTable(race3Data, 'table-3-overall', 'Overall');
+                    createTable(race3Data, 'table-3-female', 'Female');
+                    createTable(race3Data, 'table-3-male', 'Male');
+                })
+                .catch(error => {
+                    document.getElementById('loading-3-overall').style.display = 'none';
+                    document.getElementById('loading-3-female').style.display = 'none';
+                    document.getElementById('loading-3-male').style.display = 'none';
+                    document.getElementById('error-3-overall').style.display = 'block';
+                    document.getElementById('error-3-overall').textContent = `Lỗi: ${error.message}`;
+                });
         });
     </script>
 </body>

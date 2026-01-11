@@ -158,6 +158,38 @@
             background-color: #f0f0f0;
         }
 
+        tr.expandable {
+            cursor: pointer;
+        }
+
+        tr.expandable:hover {
+            background-color: #e8e8ff !important;
+        }
+
+        tr.expanded {
+            background-color: #f0f0ff !important;
+        }
+
+        .detail-row {
+            background-color: #f9f9f9 !important;
+        }
+
+        .detail-row td {
+            padding: 15px;
+            border-top: 2px solid #667eea;
+        }
+
+        .detail-label {
+            font-weight: bold;
+            color: #667eea;
+            min-width: 150px;
+            display: inline-block;
+        }
+
+        .detail-content {
+            margin-left: 10px;
+        }
+
         .loading {
             text-align: center;
             color: white;
@@ -269,17 +301,41 @@
                 return;
             }
 
-            // Find columns to hide (Age and TagID)
+            // Columns to always hide
             const columnsToHide = ['Age', 'age', 'AGE', 'TagID', 'tagid', 'TAGID', 'Tag Id', 'tag id', 'TAG ID'];
+            
+            // Columns to show in main view
+            const columnsToShow = ['BIB', 'Bib', 'bib', 'Name', 'name', 'NAME', 'Gen', 'gen', 'GEN', 'Gender', 'gender', 
+                                   'Distance', 'distance', 'DISTANCE', 'START', 'Start', 'start', 
+                                   'CP1', 'cp1', 'CP2', 'cp2', 'CP3', 'cp3', 
+                                   'FINISH', 'Finish', 'finish', 
+                                   'Chip Time', 'ChipTime', 'chiptime', 'CHIPTIME', 'Chip time'];
+            
             const hideIndices = [];
+            const showIndices = [];
             let chiptimeIndex = -1;
+            const columnMap = {}; // Map column name to index
             
             if (data[0]) {
                 data[0].forEach((cell, index) => {
                     const cellStr = String(cell || '').trim();
+                    columnMap[cellStr] = index;
+                    
                     if (columnsToHide.includes(cellStr)) {
                         hideIndices.push(index);
                     }
+                    
+                    // Check if column should be shown
+                    const shouldShow = columnsToShow.some(col => {
+                        const cellLower = cellStr.toLowerCase();
+                        const colLower = col.toLowerCase();
+                        return cellLower === colLower || cellLower.includes(colLower) || colLower.includes(cellLower);
+                    });
+                    
+                    if (shouldShow && !hideIndices.includes(index)) {
+                        showIndices.push(index);
+                    }
+                    
                     // Find chiptime column (case insensitive)
                     if (cellStr.toLowerCase().includes('chiptime') || cellStr.toLowerCase().includes('chip time')) {
                         chiptimeIndex = index;
@@ -302,33 +358,68 @@
             // Add ranking column header first
             html += '<th>Xếp hạng</th>';
             
-            // Create header row (skip hidden columns)
+            // Create header row (only show selected columns)
             if (data[0]) {
-                data[0].forEach((cell, index) => {
-                    if (!hideIndices.includes(index)) {
-                        html += `<th>${cell || `Cột ${index + 1}`}</th>`;
-                    }
+                showIndices.forEach(index => {
+                    const cell = data[0][index];
+                    html += `<th>${cell || `Cột ${index + 1}`}</th>`;
                 });
                 html += '</tr></thead><tbody>';
             }
 
-            // Create data rows (skip hidden columns)
+            // Create data rows
             for (let i = 1; i < data.length; i++) {
-                html += '<tr>';
+                const rowId = `row-${tableId}-${i}`;
+                const detailId = `detail-${tableId}-${i}`;
+                
+                // Main row (clickable)
+                html += `<tr class="expandable" onclick="toggleDetail('${detailId}', this)">`;
                 // Add ranking number
                 html += `<td style="text-align: center; font-weight: bold;">${i}</td>`;
                 
-                data[i].forEach((cell, index) => {
-                    if (!hideIndices.includes(index)) {
-                        const cellValue = cell !== null && cell !== undefined ? cell : '';
-                        html += `<td>${cellValue}</td>`;
-                    }
+                // Show only selected columns
+                showIndices.forEach(index => {
+                    const cellValue = data[i][index] !== null && data[i][index] !== undefined ? data[i][index] : '';
+                    html += `<td>${cellValue}</td>`;
                 });
                 html += '</tr>';
+                
+                // Detail row (hidden by default)
+                html += `<tr id="${detailId}" class="detail-row" style="display: none;">`;
+                html += `<td colspan="${showIndices.length + 1}">`;
+                html += '<div style="padding: 10px;">';
+                html += '<strong style="color: #667eea; font-size: 1.1em;">Chi tiết:</strong><br><br>';
+                
+                // Show all columns (except hidden ones)
+                if (data[0]) {
+                    data[0].forEach((header, index) => {
+                        if (!hideIndices.includes(index) && !showIndices.includes(index)) {
+                            const headerStr = String(header || '').trim();
+                            const cellValue = data[i][index] !== null && data[i][index] !== undefined ? data[i][index] : '';
+                            if (headerStr) {
+                                html += `<span class="detail-label">${headerStr}:</span>`;
+                                html += `<span class="detail-content">${cellValue}</span><br>`;
+                            }
+                        }
+                    });
+                }
+                html += '</div>';
+                html += '</td></tr>';
             }
 
             html += '</tbody></table>';
             document.getElementById(tableId).innerHTML = html;
+        }
+
+        function toggleDetail(detailId, row) {
+            const detailRow = document.getElementById(detailId);
+            if (detailRow.style.display === 'none') {
+                detailRow.style.display = '';
+                row.classList.add('expanded');
+            } else {
+                detailRow.style.display = 'none';
+                row.classList.remove('expanded');
+            }
         }
 
         function loadExcelFile(filename, loadingId, errorId, tableId) {

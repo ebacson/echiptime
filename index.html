@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kết Quả ChipTime</title>
+    <link rel="icon" type="image/x-icon" href="echiptime.ico">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         * {
@@ -22,6 +23,19 @@
         .container {
             max-width: 1400px;
             margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header-logo {
+            max-width: 400px;
+            width: 100%;
+            height: auto;
+            margin-bottom: 20px;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.3));
         }
 
         h1 {
@@ -191,7 +205,10 @@
 </head>
 <body>
     <div class="container">
-        <h1>🏃 Kết Quả ChipTime</h1>
+        <div class="header">
+            <img src="EKIDEN logo (2026).PNG" alt="EKIDEN Logo" class="header-logo">
+            <h1>🏃 Kết Quả ChipTime</h1>
+        </div>
         
         <div class="tabs">
             <button class="tab-button active" onclick="showTab('race-14')">14.4 KM</button>

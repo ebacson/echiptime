@@ -17,12 +17,45 @@
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #ffcce6 0%, #ffb3d9 100%);
             min-height: 100vh;
-            padding: 20px;
+            padding: 10px;
         }
 
         .container {
             max-width: 1400px;
             margin: 0 auto;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 5px;
+            }
+            
+            h1 {
+                font-size: 1.5em !important;
+            }
+            
+            .header-logo {
+                max-width: 250px !important;
+            }
+            
+            .tabs, .sub-tabs {
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+            
+            .tab-button, .sub-tab-button {
+                padding: 8px 15px;
+                font-size: 0.9em;
+            }
+            
+            .table-container {
+                padding: 10px;
+            }
+            
+            th, td {
+                padding: 8px 10px !important;
+                font-size: 0.85em;
+            }
         }
 
         .header {
@@ -271,6 +304,41 @@
             font-weight: bold;
             color: #ff80b3;
         }
+
+        .search-container {
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .search-box {
+            width: 100%;
+            max-width: 500px;
+            padding: 12px 20px;
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.9);
+            font-size: 1em;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .search-box:focus {
+            border-color: white;
+            background: white;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+
+        .search-box::placeholder {
+            color: #999;
+        }
+
+        @media (max-width: 768px) {
+            .search-box {
+                padding: 10px 15px;
+                font-size: 0.9em;
+            }
+        }
     </style>
 </head>
 <body>
@@ -286,6 +354,9 @@
         </div>
 
         <div id="race-14" class="tab-content active">
+            <div class="search-container">
+                <input type="text" id="search-14" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-14', 'search-14')">
+            </div>
             <div class="table-container">
                 <div id="loading-14" class="loading">Đang tải dữ liệu...</div>
                 <div id="error-14" class="error" style="display: none;"></div>
@@ -301,6 +372,9 @@
             </div>
             
             <div id="overall-3" class="sub-tab-content active">
+                <div class="search-container">
+                    <input type="text" id="search-3-overall" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-3-overall', 'search-3-overall')">
+                </div>
                 <div class="table-container">
                     <div id="loading-3-overall" class="loading">Đang tải dữ liệu...</div>
                     <div id="error-3-overall" class="error" style="display: none;"></div>
@@ -309,6 +383,9 @@
             </div>
             
             <div id="female-3" class="sub-tab-content">
+                <div class="search-container">
+                    <input type="text" id="search-3-female" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-3-female', 'search-3-female')">
+                </div>
                 <div class="table-container">
                     <div id="loading-3-female" class="loading">Đang tải dữ liệu...</div>
                     <div id="error-3-female" class="error" style="display: none;"></div>
@@ -317,6 +394,9 @@
             </div>
             
             <div id="male-3" class="sub-tab-content">
+                <div class="search-container">
+                    <input type="text" id="search-3-male" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-3-male', 'search-3-male')">
+                </div>
                 <div class="table-container">
                     <div id="loading-3-male" class="loading">Đang tải dữ liệu...</div>
                     <div id="error-3-male" class="error" style="display: none;"></div>
@@ -537,6 +617,95 @@
             } else {
                 detailRow.style.display = 'none';
                 row.classList.remove('expanded');
+            }
+        }
+
+        // Store original rankings
+        const originalRankings = {};
+
+        function filterTable(tableId, searchId) {
+            const searchInput = document.getElementById(searchId);
+            const filter = searchInput.value.toLowerCase().trim();
+            const table = document.getElementById(tableId);
+            
+            if (!table) return;
+            
+            const rows = Array.from(table.querySelectorAll('tbody tr')).filter(row => !row.classList.contains('detail-row'));
+            let visibleCount = 0;
+            
+            // Store original rankings if not already stored
+            if (!originalRankings[tableId]) {
+                originalRankings[tableId] = {};
+                rows.forEach((row, index) => {
+                    const firstCell = row.querySelector('td');
+                    if (firstCell) {
+                        originalRankings[tableId][index] = firstCell.textContent;
+                    }
+                });
+            }
+            
+            rows.forEach((row, index) => {
+                if (filter === '') {
+                    // Restore original ranking
+                    row.style.display = '';
+                    const firstCell = row.querySelector('td');
+                    if (firstCell && originalRankings[tableId] && originalRankings[tableId][index]) {
+                        firstCell.textContent = originalRankings[tableId][index];
+                    }
+                } else {
+                    // Get all cells in the row
+                    const cells = row.querySelectorAll('td');
+                    let found = false;
+                    
+                    cells.forEach(cell => {
+                        const cellText = cell.textContent || cell.innerText;
+                        const cellLower = cellText.toLowerCase();
+                        
+                        // Check if search term matches (fuzzy search)
+                        if (cellLower.includes(filter)) {
+                            found = true;
+                        }
+                    });
+                    
+                    if (found) {
+                        row.style.display = '';
+                        visibleCount++;
+                        // Update ranking
+                        const firstCell = row.querySelector('td');
+                        if (firstCell) {
+                            firstCell.textContent = visibleCount;
+                        }
+                    } else {
+                        row.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Handle detail rows
+            const allRows = table.querySelectorAll('tbody tr');
+            allRows.forEach(row => {
+                if (row.classList.contains('detail-row')) {
+                    const prevRow = row.previousElementSibling;
+                    if (prevRow && prevRow.style.display === 'none') {
+                        row.style.display = 'none';
+                    }
+                }
+            });
+            
+            // Show message if no results
+            const tbody = table.querySelector('tbody');
+            if (tbody) {
+                let noResultsMsg = tbody.querySelector('.no-results');
+                if (visibleCount === 0 && filter !== '') {
+                    if (!noResultsMsg) {
+                        noResultsMsg = document.createElement('tr');
+                        noResultsMsg.className = 'no-results';
+                        noResultsMsg.innerHTML = `<td colspan="100%" style="text-align: center; padding: 20px; color: #999;">Không tìm thấy kết quả nào</td>`;
+                        tbody.appendChild(noResultsMsg);
+                    }
+                } else if (noResultsMsg) {
+                    noResultsMsg.remove();
+                }
             }
         }
 

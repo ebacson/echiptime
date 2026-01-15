@@ -573,7 +573,7 @@
             const dataForRanking = originalData || data;
             
             // Filter data by gender if needed
-            const filteredData = filterDataByGender(data, genderFilter);
+            let filteredData = filterDataByGender(data, genderFilter);
             
             if (!filteredData || filteredData.length === 0) {
                 document.getElementById(tableId).innerHTML = '<p style="text-align: center; padding: 20px;">Không có dữ liệu</p>';

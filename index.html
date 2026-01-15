@@ -490,11 +490,92 @@
             return filteredData;
         }
 
-        function createTable(data, tableId, genderFilter = 'Overall') {
-            // Filter data by gender if needed
-            data = filterDataByGender(data, genderFilter);
+        function calculateRankings(originalData, chiptimeIndex, genderIndex) {
+            if (!originalData || originalData.length < 2 || chiptimeIndex < 0) {
+                return { overall: {}, byGender: { female: {}, male: {} } };
+            }
             
-            if (!data || data.length === 0) {
+            // Sort all data by chiptime
+            const sortedAll = [...originalData.slice(1)].sort((a, b) => {
+                const timeA = timeToSeconds(a[chiptimeIndex]);
+                const timeB = timeToSeconds(b[chiptimeIndex]);
+                return timeA - timeB;
+            });
+            
+            // Calculate overall rankings
+            const overallRankings = {};
+            sortedAll.forEach((row, index) => {
+                const bibIndex = originalData[0].findIndex(h => {
+                    const hStr = String(h || '').toLowerCase();
+                    return hStr.includes('bib') || hStr.includes('bib');
+                });
+                const nameIndex = originalData[0].findIndex(h => {
+                    const hStr = String(h || '').toLowerCase();
+                    return hStr === 'name' || hStr.includes('name');
+                });
+                
+                const key = bibIndex >= 0 ? String(row[bibIndex]) : (nameIndex >= 0 ? String(row[nameIndex]) : index);
+                overallRankings[key] = index + 1;
+            });
+            
+            // Calculate rankings by gender
+            const femaleRankings = {};
+            const maleRankings = {};
+            
+            if (genderIndex >= 0) {
+                const sortedFemale = sortedAll.filter(row => {
+                    const gender = String(row[genderIndex] || '').trim().toLowerCase();
+                    return gender === 'f' || gender === 'female' || gender === 'nữ';
+                });
+                
+                const sortedMale = sortedAll.filter(row => {
+                    const gender = String(row[genderIndex] || '').trim().toLowerCase();
+                    return gender === 'm' || gender === 'male' || gender === 'nam';
+                });
+                
+                sortedFemale.forEach((row, index) => {
+                    const bibIndex = originalData[0].findIndex(h => {
+                        const hStr = String(h || '').toLowerCase();
+                        return hStr.includes('bib') || hStr.includes('bib');
+                    });
+                    const nameIndex = originalData[0].findIndex(h => {
+                        const hStr = String(h || '').toLowerCase();
+                        return hStr === 'name' || hStr.includes('name');
+                    });
+                    
+                    const key = bibIndex >= 0 ? String(row[bibIndex]) : (nameIndex >= 0 ? String(row[nameIndex]) : index);
+                    femaleRankings[key] = index + 1;
+                });
+                
+                sortedMale.forEach((row, index) => {
+                    const bibIndex = originalData[0].findIndex(h => {
+                        const hStr = String(h || '').toLowerCase();
+                        return hStr.includes('bib') || hStr.includes('bib');
+                    });
+                    const nameIndex = originalData[0].findIndex(h => {
+                        const hStr = String(h || '').toLowerCase();
+                        return hStr === 'name' || hStr.includes('name');
+                    });
+                    
+                    const key = bibIndex >= 0 ? String(row[bibIndex]) : (nameIndex >= 0 ? String(row[nameIndex]) : index);
+                    maleRankings[key] = index + 1;
+                });
+            }
+            
+            return {
+                overall: overallRankings,
+                byGender: { female: femaleRankings, male: maleRankings }
+            };
+        }
+
+        function createTable(data, tableId, genderFilter = 'Overall', originalData = null) {
+            // Use original data if provided, otherwise use filtered data
+            const dataForRanking = originalData || data;
+            
+            // Filter data by gender if needed
+            const filteredData = filterDataByGender(data, genderFilter);
+            
+            if (!filteredData || filteredData.length === 0) {
                 document.getElementById(tableId).innerHTML = '<p style="text-align: center; padding: 20px;">Không có dữ liệu</p>';
                 return;
             }
@@ -541,14 +622,47 @@
                 });
             }
 
-            // Sort data by chiptime if column found
-            if (chiptimeIndex >= 0 && data.length > 1) {
-                const sortedData = [data[0], ...data.slice(1).sort((a, b) => {
+            // Find gender index for ranking calculation
+            let genderIndex = -1;
+            if (dataForRanking && dataForRanking[0]) {
+                dataForRanking[0].forEach((cell, index) => {
+                    const cellStr = String(cell || '').trim().toLowerCase();
+                    if (cellStr === 'gen' || cellStr === 'gender' || cellStr.includes('gen')) {
+                        genderIndex = index;
+                    }
+                });
+            }
+            
+            // Calculate rankings if we have original data
+            let rankings = null;
+            if (dataForRanking && chiptimeIndex >= 0 && dataForRanking.length > 1) {
+                rankings = calculateRankings(dataForRanking, chiptimeIndex, genderIndex);
+                rankingsData[tableId] = rankings;
+            }
+            
+            // Sort filtered data by chiptime if column found
+            if (chiptimeIndex >= 0 && filteredData.length > 1) {
+                const sortedData = [filteredData[0], ...filteredData.slice(1).sort((a, b) => {
                     const timeA = timeToSeconds(a[chiptimeIndex]);
                     const timeB = timeToSeconds(b[chiptimeIndex]);
                     return timeA - timeB;
                 })];
-                data = sortedData;
+                filteredData = sortedData;
+            }
+            
+            // Find BIB and Name indices for ranking lookup
+            let bibIndex = -1;
+            let nameIndex = -1;
+            if (filteredData[0]) {
+                filteredData[0].forEach((cell, index) => {
+                    const cellStr = String(cell || '').trim().toLowerCase();
+                    if (cellStr.includes('bib')) {
+                        bibIndex = index;
+                    }
+                    if (cellStr === 'name') {
+                        nameIndex = index;
+                    }
+                });
             }
 
             let html = '<table><thead><tr>';
@@ -566,18 +680,37 @@
             }
 
             // Create data rows
-            for (let i = 1; i < data.length; i++) {
+            for (let i = 1; i < filteredData.length; i++) {
                 const rowId = `row-${tableId}-${i}`;
                 const detailId = `detail-${tableId}-${i}`;
                 
+                // Get key for ranking lookup
+                const rowKey = bibIndex >= 0 ? String(filteredData[i][bibIndex]) : 
+                              (nameIndex >= 0 ? String(filteredData[i][nameIndex]) : i);
+                
+                // Get rankings for this person
+                let overallRank = '-';
+                let genderRank = '-';
+                if (rankings) {
+                    overallRank = rankings.overall[rowKey] || '-';
+                    if (genderIndex >= 0) {
+                        const gender = String(filteredData[i][genderIndex] || '').trim().toLowerCase();
+                        if (gender === 'f' || gender === 'female' || gender === 'nữ') {
+                            genderRank = rankings.byGender.female[rowKey] || '-';
+                        } else if (gender === 'm' || gender === 'male' || gender === 'nam') {
+                            genderRank = rankings.byGender.male[rowKey] || '-';
+                        }
+                    }
+                }
+                
                 // Main row (clickable)
                 html += `<tr class="expandable" onclick="toggleDetail('${detailId}', this)">`;
-                // Add ranking number
+                // Add ranking number (always show current filter ranking)
                 html += `<td style="text-align: center; font-weight: bold;">${i}</td>`;
                 
                 // Show only selected columns
                 showIndices.forEach(index => {
-                    const cellValue = data[i][index] !== null && data[i][index] !== undefined ? data[i][index] : '';
+                    const cellValue = filteredData[i][index] !== null && filteredData[i][index] !== undefined ? filteredData[i][index] : '';
                     html += `<td>${cellValue}</td>`;
                 });
                 html += '</tr>';
@@ -588,12 +721,24 @@
                 html += '<div style="padding: 10px;">';
                 html += '<strong style="color: #ff66b3; font-size: 1.1em;">Chi tiết:</strong><br><br>';
                 
+                // Show rankings if available
+                if (rankings && (tableId.includes('table-3') || tableId.includes('table-14'))) {
+                    html += `<span class="detail-label">Xếp hạng tổng thể:</span>`;
+                    html += `<span class="detail-content"><strong>${overallRank}</strong></span><br>`;
+                    if (genderRank !== '-') {
+                        html += `<span class="detail-label">Xếp hạng theo giới tính:</span>`;
+                        html += `<span class="detail-content"><strong>${genderRank}</strong></span><br><br>`;
+                    } else {
+                        html += '<br>';
+                    }
+                }
+                
                 // Show all columns (except hidden ones)
-                if (data[0]) {
-                    data[0].forEach((header, index) => {
+                if (filteredData[0]) {
+                    filteredData[0].forEach((header, index) => {
                         if (!hideIndices.includes(index) && !showIndices.includes(index)) {
                             const headerStr = String(header || '').trim();
-                            const cellValue = data[i][index] !== null && data[i][index] !== undefined ? data[i][index] : '';
+                            const cellValue = filteredData[i][index] !== null && filteredData[i][index] !== undefined ? filteredData[i][index] : '';
                             if (headerStr) {
                                 html += `<span class="detail-label">${headerStr}:</span>`;
                                 html += `<span class="detail-content">${cellValue}</span><br>`;
@@ -646,12 +791,8 @@
             
             rows.forEach((row, index) => {
                 if (filter === '') {
-                    // Restore original ranking
+                    // Show row and keep original ranking (don't change it)
                     row.style.display = '';
-                    const firstCell = row.querySelector('td');
-                    if (firstCell && originalRankings[tableId] && originalRankings[tableId][index]) {
-                        firstCell.textContent = originalRankings[tableId][index];
-                    }
                 } else {
                     // Get all cells in the row
                     const cells = row.querySelectorAll('td');
@@ -670,11 +811,7 @@
                     if (found) {
                         row.style.display = '';
                         visibleCount++;
-                        // Update ranking
-                        const firstCell = row.querySelector('td');
-                        if (firstCell) {
-                            firstCell.textContent = visibleCount;
-                        }
+                        // Don't update ranking - keep original
                     } else {
                         row.style.display = 'none';
                     }
@@ -740,12 +877,42 @@
                 });
         }
 
-        // Store data for filtering
+        // Store data for filtering and ranking calculations
         let race3Data = null;
+        let race14Data = null;
+        
+        // Store rankings for each person
+        const rankingsData = {
+            'table-3-overall': null,
+            'table-3-female': null,
+            'table-3-male': null,
+            'table-14': null
+        };
 
         // Load both files when page loads
         window.addEventListener('DOMContentLoaded', () => {
-            loadExcelFile('Results_14.4KM.xlsx', 'loading-14', 'error-14', 'table-14');
+            // Load 14.4KM file
+            fetch('Results_14.4KM.xlsx')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Không thể tải file: Results_14.4KM.xlsx');
+                    }
+                    return response.arrayBuffer();
+                })
+                .then(data => {
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    race14Data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+                    
+                    document.getElementById('loading-14').style.display = 'none';
+                    createTable(race14Data, 'table-14', 'Overall', race14Data);
+                })
+                .catch(error => {
+                    document.getElementById('loading-14').style.display = 'none';
+                    document.getElementById('error-14').style.display = 'block';
+                    document.getElementById('error-14').textContent = `Lỗi: ${error.message}`;
+                });
             
             // Load 3.6KM file and create all three views
             fetch('Results_3.6KM.xlsx')
@@ -761,14 +928,14 @@
                     const worksheet = workbook.Sheets[firstSheetName];
                     race3Data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-                    // Create all three views
+                    // Create all three views with original data for ranking calculation
                     document.getElementById('loading-3-overall').style.display = 'none';
                     document.getElementById('loading-3-female').style.display = 'none';
                     document.getElementById('loading-3-male').style.display = 'none';
                     
-                    createTable(race3Data, 'table-3-overall', 'Overall');
-                    createTable(race3Data, 'table-3-female', 'Female');
-                    createTable(race3Data, 'table-3-male', 'Male');
+                    createTable(race3Data, 'table-3-overall', 'Overall', race3Data);
+                    createTable(race3Data, 'table-3-female', 'Female', race3Data);
+                    createTable(race3Data, 'table-3-male', 'Male', race3Data);
                 })
                 .catch(error => {
                     document.getElementById('loading-3-overall').style.display = 'none';

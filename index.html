@@ -707,7 +707,10 @@
                 rankingsData[tableId] = rankings;
             }
             
-            // Sort filtered data: if finished, sort by chip time; otherwise sort by last checkpoint time
+            // Sort filtered data: 
+            // 1. Finished athletes (by chip time)
+            // 2. Athletes with START data (by checkpoint time)
+            // 3. Athletes without any data (at the end)
             if (filteredData.length > 1) {
                 // Find checkpoint indices and chip time index
                 const checkpointIndices = [];
@@ -729,6 +732,14 @@
                 
                 // Sort by checkpoint time or chip time
                 const sortedData = [filteredData[0], ...filteredData.slice(1).sort((a, b) => {
+                    // Check if athletes have START data
+                    const aHasStart = startIndex >= 0 && a[startIndex] && String(a[startIndex]).trim();
+                    const bHasStart = startIndex >= 0 && b[startIndex] && String(b[startIndex]).trim();
+                    
+                    // Athletes without START data go to the end
+                    if (!aHasStart && bHasStart) return 1;
+                    if (aHasStart && !bHasStart) return -1;
+                    
                     // If both have finish time, sort by chip time
                     if (chiptimeIndex >= 0 && a[chiptimeIndex] && b[chiptimeIndex]) {
                         const timeA = timeToSeconds(a[chiptimeIndex]);
@@ -738,7 +749,7 @@
                         }
                     }
                     
-                    // If one has finish time, it comes first
+                    // If one has finish time, it comes first (among those with START)
                     if (finishIndex >= 0) {
                         const aHasFinish = a[finishIndex] && String(a[finishIndex]).trim();
                         const bHasFinish = b[finishIndex] && String(b[finishIndex]).trim();
@@ -747,8 +758,13 @@
                     }
                     
                     // Sort by last checkpoint time (from last to first)
-                    const checkpointsOrder = [...checkpointIndices].reverse(); // Start from last checkpoint
-                    for (const cpIndex of checkpointsOrder) {
+                    // Order: FINISH > CP3 > CP2 > CP1 > START
+                    const allCheckpoints = [];
+                    if (finishIndex >= 0) allCheckpoints.push(finishIndex);
+                    checkpointIndices.sort().reverse().forEach(idx => allCheckpoints.push(idx)); // CP3, CP2, CP1
+                    if (startIndex >= 0) allCheckpoints.push(startIndex);
+                    
+                    for (const cpIndex of allCheckpoints) {
                         const aTime = a[cpIndex] ? timeToSeconds(a[cpIndex]) : Infinity;
                         const bTime = b[cpIndex] ? timeToSeconds(b[cpIndex]) : Infinity;
                         

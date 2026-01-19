@@ -1245,12 +1245,6 @@
         // Function to update race name in UI
         function updateRaceName(raceName) {
             if (raceName && typeof raceName === 'string' && raceName.trim()) {
-                // Skip if it's "NO NAME" or empty
-                if (raceName.trim().toUpperCase() === 'NO NAME' || raceName.trim() === '') {
-                    console.log('Race name is "NO NAME" or empty, keeping default');
-                    return;
-                }
-                
                 // Update page title
                 document.title = `Kết quả ${raceName}`;
                 
@@ -1286,11 +1280,12 @@
                         
                         if (eventName) {
                             const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
-                            if (nameStr && nameStr.trim() && nameStr.trim().toUpperCase() !== 'NO NAME') {
+                            if (nameStr && nameStr.trim()) {
+                                // Update regardless of value, even if it's "NO NAME"
                                 updateRaceName(nameStr.trim());
                                 return;
                             } else {
-                                console.log('event_name is "NO NAME" or empty, keeping default');
+                                console.log('event_name is empty, keeping default');
                             }
                         }
                     } else {

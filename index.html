@@ -1215,10 +1215,8 @@
             
             rows.forEach((row, index) => {
                 const distance = String(row[3] || '').trim();
-                if (!distance) return; // Skip rows without distance
-                
-                // Normalize distance key (use original format as key)
-                const distanceKey = distance;
+                // If no distance, use "All" as default to ensure athletes are still displayed
+                const distanceKey = distance || 'All';
                 
                 if (!distanceGroups[distanceKey]) {
                     distanceGroups[distanceKey] = {
@@ -1230,6 +1228,36 @@
                 distanceGroups[distanceKey].rows.push(row);
                 distanceGroups[distanceKey].metadata.push(rowsMetadata[index]);
             });
+            
+            // If no rows at all, but we have athletes, create a default group
+            if (rows.length === 0 && Object.keys(athletes).length > 0) {
+                // Create rows from all athletes even if they don't have distance
+                Object.keys(athletes).forEach(tagId => {
+                    const athlete = athletes[tagId];
+                    if (!athlete) return;
+                    
+                    const row = [
+                        athlete.bib || '',
+                        athlete.name || '',
+                        athlete.gen || '',
+                        athlete.distance || ''
+                    ];
+                    
+                    if (!distanceGroups['All']) {
+                        distanceGroups['All'] = {
+                            rows: [],
+                            metadata: []
+                        };
+                    }
+                    
+                    distanceGroups['All'].rows.push(row);
+                    distanceGroups['All'].metadata.push({
+                        tagId: tagId,
+                        times: {},
+                        athlete: athlete
+                    });
+                });
+            }
             
             // Convert to return format
             const result = {};

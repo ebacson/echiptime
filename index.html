@@ -597,7 +597,18 @@
             };
         }
 
-        function createTable(data, tableId, genderFilter = 'Overall', originalData = null) {
+        // Store metadata for split time calculation
+        const tableMetadata = {};
+
+        function createTable(data, tableId, genderFilter = 'Overall', originalData = null, metadata = null, checkpoints = null) {
+            // Store metadata for this table
+            if (metadata) {
+                tableMetadata[tableId] = metadata;
+            }
+            if (checkpoints) {
+                tableMetadata[tableId + '_checkpoints'] = checkpoints;
+            }
+            
             // Use original data if provided, otherwise use filtered data
             const dataForRanking = originalData || data;
             
@@ -757,6 +768,42 @@
                     if (genderRank !== '-') {
                         html += `<span class="detail-label">Xếp hạng theo giới tính:</span>`;
                         html += `<span class="detail-content"><strong>${genderRank}</strong></span><br><br>`;
+                    } else {
+                        html += '<br>';
+                    }
+                }
+                
+                // Show split times if metadata is available
+                const metadata = tableMetadata[tableId];
+                const checkpoints = tableMetadata[tableId + '_checkpoints'];
+                if (metadata && checkpoints && metadata[i - 1]) {
+                    const athleteMetadata = metadata[i - 1];
+                    const times = athleteMetadata.times || {};
+                    
+                    html += '<strong style="color: #ff66b3; font-size: 1em;">Split Time:</strong><br>';
+                    
+                    // Calculate and show split times
+                    let prevTime = times['START'];
+                    checkpoints.forEach((cp, cpIndex) => {
+                        if (cp === 'START') {
+                            prevTime = times['START'];
+                            return;
+                        }
+                        
+                        const currentTime = times[cp];
+                        if (currentTime && prevTime) {
+                            const splitTime = calculateTimeDifference(prevTime, currentTime);
+                            html += `<span class="detail-label">${cp}:</span>`;
+                            html += `<span class="detail-content"><strong>${splitTime}</strong></span><br>`;
+                            prevTime = currentTime;
+                        }
+                    });
+                    
+                    // Show total chip time
+                    if (times['START'] && times['FINISH']) {
+                        const chipTime = calculateTimeDifference(times['START'], times['FINISH']);
+                        html += `<span class="detail-label">Chip Time:</span>`;
+                        html += `<span class="detail-content"><strong>${chipTime}</strong></span><br><br>`;
                     } else {
                         html += '<br>';
                     }
@@ -973,36 +1020,48 @@
             
             const noName = firebaseData.NO_NAME;
             const athletes = noName.Athletes || {};
-            const startData = noName.START || {};
-            const cp1Data = noName.CP1 || {};
-            const cp2Data = noName.CP2 || {};
-            const cp3Data = noName.CP3 || {};
-            const finishData = noName.FINISH || {};
             
-            // Create header row
-            const header = ['BIB', 'Name', 'Gen', 'Distance', 'START', 'CP1', 'CP2', 'CP3', 'FINISH', 'Chip Time'];
+            // Define all possible checkpoints
+            const allCheckpoints = ['START', 'CP1', 'CP2', 'CP3', 'FINISH'];
+            const checkpointData = {};
+            allCheckpoints.forEach(cp => {
+                checkpointData[cp] = noName[cp] || {};
+            });
             
-            // Create data rows
+            // Find which checkpoints have data
+            const availableCheckpoints = [];
+            allCheckpoints.forEach(cp => {
+                const cpData = checkpointData[cp];
+                const hasData = Object.keys(cpData).some(tagId => {
+                    const lines = cpData[tagId]?.lines || {};
+                    return Object.keys(lines).length > 0;
+                });
+                if (hasData) {
+                    availableCheckpoints.push(cp);
+                }
+            });
+            
+            // Create header row with only available checkpoints
+            const header = ['BIB', 'Name', 'Gen', 'Distance', ...availableCheckpoints, 'Chip Time'];
+            
+            // Create data rows with checkpoint times and metadata
             const rows = [];
+            const rowsMetadata = []; // Store times for split calculation
             
             Object.keys(athletes).forEach(tagId => {
                 const athlete = athletes[tagId];
                 if (!athlete) return;
                 
                 // Get times for this athlete
-                const startLines = startData[tagId]?.lines || {};
-                const cp1Lines = cp1Data[tagId]?.lines || {};
-                const cp2Lines = cp2Data[tagId]?.lines || {};
-                const cp3Lines = cp3Data[tagId]?.lines || {};
-                const finishLines = finishData[tagId]?.lines || {};
+                const times = {};
+                availableCheckpoints.forEach(cp => {
+                    const lines = checkpointData[cp][tagId]?.lines || {};
+                    times[cp] = getEarliestTime(lines);
+                });
                 
-                const startTime = getEarliestTime(startLines);
-                const cp1Time = getEarliestTime(cp1Lines);
-                const cp2Time = getEarliestTime(cp2Lines);
-                const cp3Time = getEarliestTime(cp3Lines);
-                const finishTime = getEarliestTime(finishLines);
-                
-                // Calculate Chip Time
+                // Calculate Chip Time (FINISH - START)
+                const startTime = times['START'];
+                const finishTime = times['FINISH'];
                 const chipTime = calculateTimeDifference(startTime, finishTime);
                 
                 // Create row
@@ -1011,24 +1070,47 @@
                     athlete.name || '',
                     athlete.gen || '',
                     athlete.distance || '',
-                    startTime ? formatTime(startTime) : '',
-                    cp1Time ? formatTime(cp1Time) : '',
-                    cp2Time ? formatTime(cp2Time) : '',
-                    cp3Time ? formatTime(cp3Time) : '',
-                    finishTime ? formatTime(finishTime) : '',
+                    ...availableCheckpoints.map(cp => times[cp] ? formatTime(times[cp]) : ''),
                     chipTime
                 ];
                 
                 rows.push(row);
+                
+                // Store metadata for split time calculation
+                rowsMetadata.push({
+                    tagId: tagId,
+                    times: times,
+                    athlete: athlete
+                });
             });
             
             // Filter rows by distance if needed
-            const race14Rows = rows.filter(row => row[3] === '14.4KM');
-            const race3Rows = rows.filter(row => row[3] === '3.6KM');
+            const race14Rows = [];
+            const race14Metadata = [];
+            const race3Rows = [];
+            const race3Metadata = [];
+            
+            rows.forEach((row, index) => {
+                if (row[3] === '14.4KM') {
+                    race14Rows.push(row);
+                    race14Metadata.push(rowsMetadata[index]);
+                } else if (row[3] === '3.6KM') {
+                    race3Rows.push(row);
+                    race3Metadata.push(rowsMetadata[index]);
+                }
+            });
             
             return {
-                race14: [header, ...race14Rows],
-                race3: [header, ...race3Rows]
+                race14: {
+                    data: [header, ...race14Rows],
+                    metadata: race14Metadata,
+                    checkpoints: availableCheckpoints
+                },
+                race3: {
+                    data: [header, ...race3Rows],
+                    metadata: race3Metadata,
+                    checkpoints: availableCheckpoints
+                }
             };
         }
 
@@ -1093,19 +1175,23 @@
                                 
                                 if (convertedData && convertedData.race14 && convertedData.race3) {
                                     // Load 14.4KM data (TEAM)
-                                    race14Data = convertedData.race14;
+                                    race14Data = convertedData.race14.data;
                                     document.getElementById('loading-14').style.display = 'none';
-                                    createTable(race14Data, 'table-14', 'Overall', race14Data);
+                                    createTable(race14Data, 'table-14', 'Overall', race14Data, 
+                                               convertedData.race14.metadata, convertedData.race14.checkpoints);
                                     
                                     // Load 3.6KM data (Cá Nhân)
-                                    race3Data = convertedData.race3;
+                                    race3Data = convertedData.race3.data;
                                     document.getElementById('loading-3-overall').style.display = 'none';
                                     document.getElementById('loading-3-female').style.display = 'none';
                                     document.getElementById('loading-3-male').style.display = 'none';
                                     
-                                    createTable(race3Data, 'table-3-overall', 'Overall', race3Data);
-                                    createTable(race3Data, 'table-3-female', 'Female', race3Data);
-                                    createTable(race3Data, 'table-3-male', 'Male', race3Data);
+                                    createTable(race3Data, 'table-3-overall', 'Overall', race3Data,
+                                               convertedData.race3.metadata, convertedData.race3.checkpoints);
+                                    createTable(race3Data, 'table-3-female', 'Female', race3Data,
+                                               convertedData.race3.metadata, convertedData.race3.checkpoints);
+                                    createTable(race3Data, 'table-3-male', 'Male', race3Data,
+                                               convertedData.race3.metadata, convertedData.race3.checkpoints);
                                 } else {
                                     throw new Error('Dữ liệu không hợp lệ');
                                 }

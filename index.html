@@ -1280,15 +1280,30 @@
                 return;
             }
             
-            console.log('Firebase is ready, loading event_name from root level...');
+            console.log('Firebase is ready, loading event_name...');
             
-            // Get race name directly from root level event_name node
-            const eventNameRef = window.firebaseRef(window.firebaseDatabase, 'event_name');
-            console.log('Reading from path: event_name (root level)');
+            // Try multiple paths: root level, NO_NAME/event_name, RACE_CONFIG/event_name
+            const tryPaths = [
+                'event_name',           // Root level
+                'NO_NAME/event_name',  // Inside NO_NAME
+                'RACE_CONFIG/event_name' // Inside RACE_CONFIG
+            ];
             
-            // Use onValue to listen for changes (real-time) and also get initial value
-            try {
-                window.firebaseOnValue(eventNameRef, (snapshot) => {
+            let pathIndex = 0;
+            
+            const tryLoadFromPath = () => {
+                if (pathIndex >= tryPaths.length) {
+                    console.log('Tried all paths, event_name not found');
+                    return;
+                }
+                
+                const path = tryPaths[pathIndex];
+                console.log(`Trying path ${pathIndex + 1}/${tryPaths.length}: ${path}`);
+                const eventNameRef = window.firebaseRef(window.firebaseDatabase, path);
+                
+                // Use onValue to listen for changes (real-time) and also get initial value
+                try {
+                    window.firebaseOnValue(eventNameRef, (snapshot) => {
                     console.log('onValue callback triggered');
                     console.log('Snapshot exists:', snapshot.exists());
                     console.log('Snapshot value:', snapshot.val());
@@ -1313,44 +1328,20 @@
                         
                         if (nameStr && nameStr.trim().length > 0) {
                             // Update regardless of value, even if it's "NO NAME"
-                            console.log('Updating race name to:', nameStr.trim());
+                            console.log(`Found event_name at path "${path}":`, nameStr.trim());
                             updateRaceName(nameStr.trim());
+                            return; // Found, stop trying other paths
                         } else {
-                            console.log('event_name is empty or whitespace only');
+                            console.log(`event_name at path "${path}" is empty or whitespace only`);
+                            // Try next path
+                            pathIndex++;
+                            tryLoadFromPath();
                         }
                     } else {
-                        console.log('event_name node does not exist at root level');
-                        // Try reading root to see what's there
-                        const rootRef = window.firebaseRef(window.firebaseDatabase, '/');
-                        window.firebaseGet(rootRef).then((rootSnapshot) => {
-                            if (rootSnapshot.exists()) {
-                                const rootData = rootSnapshot.val();
-                                console.log('Root level data keys:', Object.keys(rootData || {}));
-                                
-                                // Check if event_name is in root
-                                if (rootData && rootData.event_name) {
-                                    console.log('Found event_name in root data:', rootData.event_name);
-                                    updateRaceName(String(rootData.event_name).trim());
-                                    return;
-                                }
-                                
-                                // Check if event_name is in NO_NAME
-                                if (rootData && rootData.NO_NAME && rootData.NO_NAME.event_name) {
-                                    console.log('Found event_name in NO_NAME:', rootData.NO_NAME.event_name);
-                                    updateRaceName(String(rootData.NO_NAME.event_name).trim());
-                                    return;
-                                }
-                                
-                                // Try RACE_CONFIG path
-                                if (rootData && rootData.RACE_CONFIG && rootData.RACE_CONFIG.event_name) {
-                                    console.log('Found event_name in RACE_CONFIG:', rootData.RACE_CONFIG.event_name);
-                                    updateRaceName(String(rootData.RACE_CONFIG.event_name).trim());
-                                    return;
-                                }
-                                
-                                console.log('event_name not found in root, NO_NAME, or RACE_CONFIG');
-                            }
-                        });
+                        console.log(`event_name node does not exist at path: ${path}`);
+                        // Try next path
+                        pathIndex++;
+                        tryLoadFromPath();
                     }
                 }, (error) => {
                     console.error('Error in onValue for event_name:', error);

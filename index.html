@@ -1438,6 +1438,108 @@
                 });
         }
 
+        // Function to load data from Firebase
+        function loadDataFromFirebase(eventName) {
+            if (!eventName) {
+                console.log('No event_name provided, waiting...');
+                return;
+            }
+            
+            console.log('Loading data for event:', eventName);
+            
+            // Load data from Firebase using event_name as the root path
+            const dataRef = window.firebaseRef(window.firebaseDatabase, eventName);
+            window.firebaseGet(dataRef)
+                .then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const firebaseData = snapshot.val();
+                        
+                        const convertedData = convertFirebaseDataToArray({ [eventName]: firebaseData });
+                        
+                        if (convertedData && convertedData.race14 && convertedData.race3) {
+                            // Get current event_name to determine mode
+                            const isEkiden = eventName.includes('EKIDEN') || eventName.includes('Ekiden');
+                            
+                            if (isEkiden) {
+                                // EKIDEN mode: TEAM and Cá Nhân
+                                // Load 14.4KM data (TEAM)
+                                race14Data = convertedData.race14.data;
+                                const loading14 = document.getElementById('loading-14');
+                                if (loading14) loading14.style.display = 'none';
+                                createTable(race14Data, 'table-14', 'Overall', race14Data, 
+                                           convertedData.race14.metadata, convertedData.race14.checkpoints);
+                                
+                                // Load 3.6KM data (Cá Nhân)
+                                race3Data = convertedData.race3.data;
+                                const loading3Overall = document.getElementById('loading-3-overall');
+                                const loading3Female = document.getElementById('loading-3-female');
+                                const loading3Male = document.getElementById('loading-3-male');
+                                if (loading3Overall) loading3Overall.style.display = 'none';
+                                if (loading3Female) loading3Female.style.display = 'none';
+                                if (loading3Male) loading3Male.style.display = 'none';
+                                
+                                createTable(race3Data, 'table-3-overall', 'Overall', race3Data,
+                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
+                                createTable(race3Data, 'table-3-female', 'Female', race3Data,
+                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
+                                createTable(race3Data, 'table-3-male', 'Male', race3Data,
+                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
+                            } else {
+                                // Distance mode: 14.4KM and 3.6KM with sub-tabs
+                                // Load 14.4KM data with sub-tabs
+                                race14Data = convertedData.race14.data;
+                                const loading14Overall = document.getElementById('loading-14-overall');
+                                const loading14Female = document.getElementById('loading-14-female');
+                                const loading14Male = document.getElementById('loading-14-male');
+                                if (loading14Overall) loading14Overall.style.display = 'none';
+                                if (loading14Female) loading14Female.style.display = 'none';
+                                if (loading14Male) loading14Male.style.display = 'none';
+                                
+                                createTable(race14Data, 'table-14-overall', 'Overall', race14Data,
+                                           convertedData.race14.metadata, convertedData.race14.checkpoints);
+                                createTable(race14Data, 'table-14-female', 'Female', race14Data,
+                                           convertedData.race14.metadata, convertedData.race14.checkpoints);
+                                createTable(race14Data, 'table-14-male', 'Male', race14Data,
+                                           convertedData.race14.metadata, convertedData.race14.checkpoints);
+                                
+                                // Load 3.6KM data with sub-tabs
+                                race3Data = convertedData.race3.data;
+                                const loading3DistOverall = document.getElementById('loading-3-dist-overall');
+                                const loading3DistFemale = document.getElementById('loading-3-dist-female');
+                                const loading3DistMale = document.getElementById('loading-3-dist-male');
+                                if (loading3DistOverall) loading3DistOverall.style.display = 'none';
+                                if (loading3DistFemale) loading3DistFemale.style.display = 'none';
+                                if (loading3DistMale) loading3DistMale.style.display = 'none';
+                                
+                                createTable(race3Data, 'table-3-dist-overall', 'Overall', race3Data,
+                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
+                                createTable(race3Data, 'table-3-dist-female', 'Female', race3Data,
+                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
+                                createTable(race3Data, 'table-3-dist-male', 'Male', race3Data,
+                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
+                            }
+                        } else {
+                            throw new Error('Dữ liệu không hợp lệ');
+                        }
+                    } else {
+                        throw new Error('Không tìm thấy dữ liệu');
+                    }
+                })
+                .catch(error => {
+                    // Hide all loading indicators
+                    const allLoadings = document.querySelectorAll('.loading');
+                    allLoadings.forEach(el => el.style.display = 'none');
+                    
+                    // Show errors
+                    const allErrors = document.querySelectorAll('.error');
+                    allErrors.forEach(el => {
+                        el.style.display = 'block';
+                        el.textContent = `Lỗi: ${error.message}`;
+                    });
+                    console.error('Firebase error:', error);
+                });
+        }
+
         // Load data from Firebase when page loads
         window.addEventListener('DOMContentLoaded', () => {
             // Wait for Firebase to initialize
@@ -1445,112 +1547,32 @@
                 if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet) {
                     clearInterval(checkFirebase);
                     
-                    // Load race name first (with a small delay to ensure Firebase is ready)
+                    // Load race name first, then load data
                     setTimeout(() => {
                         console.log('Calling loadRaceName after Firebase initialization');
                         loadRaceName();
-                    }, 200);
-                    
-                    // Load all data from Firebase (NO_NAME path)
-                    const dataRef = window.firebaseRef(window.firebaseDatabase, 'NO_NAME');
-                    window.firebaseGet(dataRef)
-                        .then((snapshot) => {
-                            if (snapshot.exists()) {
-                                const firebaseData = snapshot.val();
-                                
-                                // Try to get race name from NO_NAME
-                                if (firebaseData) {
-                                    // First try event_name in NO_NAME
-                                    if (firebaseData.event_name) {
-                                        console.log('Found event_name in NO_NAME:', firebaseData.event_name);
-                                        updateRaceName(String(firebaseData.event_name).trim());
-                                    }
-                                    // Fallback to other possible fields
-                                    else {
-                                        const raceName = firebaseData.Event || firebaseData.RaceName || firebaseData.EventName ||
-                                                       firebaseData.event || firebaseData.raceName || firebaseData.eventName;
-                                        if (raceName) {
-                                            const nameStr = typeof raceName === 'string' ? raceName : (raceName.name || raceName.title || JSON.stringify(raceName));
-                                            if (nameStr && nameStr.trim()) {
-                                                updateRaceName(nameStr.trim());
+                        
+                        // After loading race name, wait a bit then load data
+                        setTimeout(() => {
+                            const eventName = document.getElementById('race-title')?.textContent || '';
+                            if (eventName && eventName !== 'Kết quả') {
+                                loadDataFromFirebase(eventName);
+                            } else {
+                                // Fallback: try to get event_name from root
+                                const rootRef = window.firebaseRef(window.firebaseDatabase, '/');
+                                window.firebaseGet(rootRef)
+                                    .then((snapshot) => {
+                                        if (snapshot.exists()) {
+                                            const rootData = snapshot.val();
+                                            const rootKeys = Object.keys(rootData || {});
+                                            if (rootKeys.length > 0) {
+                                                loadDataFromFirebase(rootKeys[0]);
                                             }
                                         }
-                                    }
-                                }
-                                
-                                const convertedData = convertFirebaseDataToArray({ NO_NAME: firebaseData });
-                                
-                                if (convertedData && convertedData.race14 && convertedData.race3) {
-                                    // Get current event_name to determine mode
-                                    const currentEventName = document.getElementById('race-title')?.textContent || '';
-                                    const isEkiden = currentEventName.includes('EKIDEN') || currentEventName.includes('Ekiden');
-                                    
-                                    if (isEkiden) {
-                                        // EKIDEN mode: TEAM and Cá Nhân
-                                        // Load 14.4KM data (TEAM)
-                                        race14Data = convertedData.race14.data;
-                                        document.getElementById('loading-14').style.display = 'none';
-                                        createTable(race14Data, 'table-14', 'Overall', race14Data, 
-                                                   convertedData.race14.metadata, convertedData.race14.checkpoints);
-                                        
-                                        // Load 3.6KM data (Cá Nhân)
-                                        race3Data = convertedData.race3.data;
-                                        document.getElementById('loading-3-overall').style.display = 'none';
-                                        document.getElementById('loading-3-female').style.display = 'none';
-                                        document.getElementById('loading-3-male').style.display = 'none';
-                                        
-                                        createTable(race3Data, 'table-3-overall', 'Overall', race3Data,
-                                                   convertedData.race3.metadata, convertedData.race3.checkpoints);
-                                        createTable(race3Data, 'table-3-female', 'Female', race3Data,
-                                                   convertedData.race3.metadata, convertedData.race3.checkpoints);
-                                        createTable(race3Data, 'table-3-male', 'Male', race3Data,
-                                                   convertedData.race3.metadata, convertedData.race3.checkpoints);
-                                    } else {
-                                        // Distance mode: 14.4KM and 3.6KM with sub-tabs
-                                        // Load 14.4KM data with sub-tabs
-                                        race14Data = convertedData.race14.data;
-                                        document.getElementById('loading-14-overall').style.display = 'none';
-                                        document.getElementById('loading-14-female').style.display = 'none';
-                                        document.getElementById('loading-14-male').style.display = 'none';
-                                        
-                                        createTable(race14Data, 'table-14-overall', 'Overall', race14Data,
-                                                   convertedData.race14.metadata, convertedData.race14.checkpoints);
-                                        createTable(race14Data, 'table-14-female', 'Female', race14Data,
-                                                   convertedData.race14.metadata, convertedData.race14.checkpoints);
-                                        createTable(race14Data, 'table-14-male', 'Male', race14Data,
-                                                   convertedData.race14.metadata, convertedData.race14.checkpoints);
-                                        
-                                        // Load 3.6KM data with sub-tabs
-                                        race3Data = convertedData.race3.data;
-                                        document.getElementById('loading-3-dist-overall').style.display = 'none';
-                                        document.getElementById('loading-3-dist-female').style.display = 'none';
-                                        document.getElementById('loading-3-dist-male').style.display = 'none';
-                                        
-                                        createTable(race3Data, 'table-3-dist-overall', 'Overall', race3Data,
-                                                   convertedData.race3.metadata, convertedData.race3.checkpoints);
-                                        createTable(race3Data, 'table-3-dist-female', 'Female', race3Data,
-                                                   convertedData.race3.metadata, convertedData.race3.checkpoints);
-                                        createTable(race3Data, 'table-3-dist-male', 'Male', race3Data,
-                                                   convertedData.race3.metadata, convertedData.race3.checkpoints);
-                                    }
-                                } else {
-                                    throw new Error('Dữ liệu không hợp lệ');
-                                }
-                            } else {
-                                throw new Error('Không tìm thấy dữ liệu');
+                                    });
                             }
-                        })
-                        .catch(error => {
-                            document.getElementById('loading-14').style.display = 'none';
-                            document.getElementById('loading-3-overall').style.display = 'none';
-                            document.getElementById('loading-3-female').style.display = 'none';
-                            document.getElementById('loading-3-male').style.display = 'none';
-                            document.getElementById('error-14').style.display = 'block';
-                            document.getElementById('error-14').textContent = `Lỗi: ${error.message}`;
-                            document.getElementById('error-3-overall').style.display = 'block';
-                            document.getElementById('error-3-overall').textContent = `Lỗi: ${error.message}`;
-                            console.error('Firebase error:', error);
-                        });
+                        }, 500);
+                    }, 200);
                 }
             }, 100);
             
@@ -1559,12 +1581,13 @@
                 clearInterval(checkFirebase);
                 if (!window.firebaseDatabase) {
                     console.error('Firebase initialization timeout');
-                    document.getElementById('loading-14').style.display = 'none';
-                    document.getElementById('loading-3-overall').style.display = 'none';
-                    document.getElementById('loading-3-female').style.display = 'none';
-                    document.getElementById('loading-3-male').style.display = 'none';
-                    document.getElementById('error-14').style.display = 'block';
-                    document.getElementById('error-14').textContent = 'Lỗi: Không thể kết nối Firebase';
+                    const allLoadings = document.querySelectorAll('.loading');
+                    allLoadings.forEach(el => el.style.display = 'none');
+                    const allErrors = document.querySelectorAll('.error');
+                    allErrors.forEach(el => {
+                        el.style.display = 'block';
+                        el.textContent = 'Lỗi: Không thể kết nối Firebase';
+                    });
                 }
             }, 10000);
         });

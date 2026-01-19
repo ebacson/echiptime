@@ -1259,8 +1259,11 @@
             console.log('updateRaceName called with:', raceName);
             
             if (raceName && typeof raceName === 'string' && raceName.trim()) {
+                // Replace underscores with spaces for display
+                const displayName = raceName.replace(/_/g, ' ');
+                
                 // Update page title
-                const newTitle = `Kết quả ${raceName}`;
+                const newTitle = `Kết quả ${displayName}`;
                 document.title = newTitle;
                 console.log('Page title updated to:', newTitle);
                 
@@ -1268,8 +1271,8 @@
                 const updateHeader = () => {
                     const titleElement = document.getElementById('race-title');
                     if (titleElement) {
-                        titleElement.textContent = raceName;
-                        console.log('Header updated successfully to:', raceName);
+                        titleElement.textContent = displayName;
+                        console.log('Header updated successfully to:', displayName);
                     } else {
                         console.log('Race title element not found, retrying...');
                         setTimeout(updateHeader, 100);
@@ -1278,7 +1281,7 @@
                 
                 updateHeader();
                 
-                // Setup tabs based on event_name
+                // Setup tabs based on event_name (use original name for logic)
                 setupTabsBasedOnEventName(raceName);
             } else {
                 console.log('Invalid race name:', raceName, 'Type:', typeof raceName);

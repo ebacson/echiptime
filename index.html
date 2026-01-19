@@ -918,52 +918,118 @@
             'table-14': null
         };
 
-        // Function to convert Firebase data to array format
-        function convertFirebaseDataToArray(firebaseData) {
-            if (!firebaseData) return null;
+        // Function to parse datetime string from Firebase
+        function parseFirebaseDateTime(dateTimeStr) {
+            // Format: "2026-01-19 17:25:05:551"
+            const parts = dateTimeStr.split(' ');
+            if (parts.length !== 2) return null;
             
-            // If data is already an array, return it
-            if (Array.isArray(firebaseData)) {
-                return firebaseData;
-            }
+            const datePart = parts[0]; // "2026-01-19"
+            const timePart = parts[1].split(':').slice(0, 3).join(':'); // "17:25:05"
             
-            // If data is an object, convert to array
-            if (typeof firebaseData === 'object') {
-                // Check if it's an object with numeric keys (like Firebase array)
-                const keys = Object.keys(firebaseData);
-                const isArrayLike = keys.every(key => !isNaN(parseInt(key)));
-                
-                if (isArrayLike) {
-                    // Convert object with numeric keys to array
-                    return keys.map(key => firebaseData[key]).filter(item => item !== null);
-                } else {
-                    // Convert object to array of arrays (header + rows)
-                    const header = Object.keys(firebaseData);
-                    const rows = [];
-                    
-                    // Get all unique row indices
-                    const rowIndices = new Set();
-                    header.forEach(key => {
-                        if (firebaseData[key] && typeof firebaseData[key] === 'object') {
-                            Object.keys(firebaseData[key]).forEach(idx => rowIndices.add(idx));
+            return new Date(`${datePart}T${timePart}`);
+        }
+
+        // Function to calculate time difference in HH:MM:SS format
+        function calculateTimeDifference(startTime, endTime) {
+            if (!startTime || !endTime) return '';
+            const diff = (endTime - startTime) / 1000; // difference in seconds
+            const hours = Math.floor(diff / 3600);
+            const minutes = Math.floor((diff % 3600) / 60);
+            const seconds = Math.floor(diff % 60);
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Function to get earliest time from lines
+        function getEarliestTime(lines) {
+            if (!lines || typeof lines !== 'object') return null;
+            let earliest = null;
+            Object.values(lines).forEach(line => {
+                if (typeof line === 'string') {
+                    const parts = line.split('#');
+                    if (parts.length >= 2) {
+                        const dateTime = parseFirebaseDateTime(parts[1]);
+                        if (dateTime && (!earliest || dateTime < earliest)) {
+                            earliest = dateTime;
                         }
-                    });
-                    
-                    // Build rows
-                    Array.from(rowIndices).sort((a, b) => parseInt(a) - parseInt(b)).forEach(idx => {
-                        const row = header.map(key => {
-                            return firebaseData[key] && firebaseData[key][idx] !== undefined 
-                                ? firebaseData[key][idx] 
-                                : '';
-                        });
-                        rows.push(row);
-                    });
-                    
-                    return [header, ...rows];
+                    }
                 }
-            }
+            });
+            return earliest;
+        }
+
+        // Function to format time as HH:MM:SS
+        function formatTime(date) {
+            if (!date) return '';
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const seconds = date.getSeconds().toString().padStart(2, '0');
+            return `${hours}:${minutes}:${seconds}`;
+        }
+
+        // Function to convert Firebase data to array format (Excel-like)
+        function convertFirebaseDataToArray(firebaseData) {
+            if (!firebaseData || !firebaseData.NO_NAME) return null;
             
-            return null;
+            const noName = firebaseData.NO_NAME;
+            const athletes = noName.Athletes || {};
+            const startData = noName.START || {};
+            const cp1Data = noName.CP1 || {};
+            const cp2Data = noName.CP2 || {};
+            const cp3Data = noName.CP3 || {};
+            const finishData = noName.FINISH || {};
+            
+            // Create header row
+            const header = ['BIB', 'Name', 'Gen', 'Distance', 'START', 'CP1', 'CP2', 'CP3', 'FINISH', 'Chip Time'];
+            
+            // Create data rows
+            const rows = [];
+            
+            Object.keys(athletes).forEach(tagId => {
+                const athlete = athletes[tagId];
+                if (!athlete) return;
+                
+                // Get times for this athlete
+                const startLines = startData[tagId]?.lines || {};
+                const cp1Lines = cp1Data[tagId]?.lines || {};
+                const cp2Lines = cp2Data[tagId]?.lines || {};
+                const cp3Lines = cp3Data[tagId]?.lines || {};
+                const finishLines = finishData[tagId]?.lines || {};
+                
+                const startTime = getEarliestTime(startLines);
+                const cp1Time = getEarliestTime(cp1Lines);
+                const cp2Time = getEarliestTime(cp2Lines);
+                const cp3Time = getEarliestTime(cp3Lines);
+                const finishTime = getEarliestTime(finishLines);
+                
+                // Calculate Chip Time
+                const chipTime = calculateTimeDifference(startTime, finishTime);
+                
+                // Create row
+                const row = [
+                    athlete.bib || '',
+                    athlete.name || '',
+                    athlete.gen || '',
+                    athlete.distance || '',
+                    startTime ? formatTime(startTime) : '',
+                    cp1Time ? formatTime(cp1Time) : '',
+                    cp2Time ? formatTime(cp2Time) : '',
+                    cp3Time ? formatTime(cp3Time) : '',
+                    finishTime ? formatTime(finishTime) : '',
+                    chipTime
+                ];
+                
+                rows.push(row);
+            });
+            
+            // Filter rows by distance if needed
+            const race14Rows = rows.filter(row => row[3] === '14.4KM');
+            const race3Rows = rows.filter(row => row[3] === '3.6KM');
+            
+            return {
+                race14: [header, ...race14Rows],
+                race3: [header, ...race3Rows]
+            };
         }
 
         // Function to load data from Firebase
@@ -1017,23 +1083,22 @@
                 if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet) {
                     clearInterval(checkFirebase);
                     
-                    // Load 14.4KM data from Firebase (TEAM)
-                    loadDataFromFirebase('race14', 'loading-14', 'error-14', 'table-14', 'Overall')
-                        .then(data => {
-                            if (data) {
-                                race14Data = data;
-                            }
-                        });
-                    
-                    // Load 3.6KM data from Firebase (Cá Nhân)
-                    const race3Ref = window.firebaseRef(window.firebaseDatabase, 'race3');
-                    window.firebaseGet(race3Ref)
+                    // Load all data from Firebase (NO_NAME path)
+                    const dataRef = window.firebaseRef(window.firebaseDatabase, 'NO_NAME');
+                    window.firebaseGet(dataRef)
                         .then((snapshot) => {
                             if (snapshot.exists()) {
                                 const firebaseData = snapshot.val();
-                                race3Data = convertFirebaseDataToArray(firebaseData);
+                                const convertedData = convertFirebaseDataToArray({ NO_NAME: firebaseData });
                                 
-                                if (race3Data && race3Data.length > 0) {
+                                if (convertedData && convertedData.race14 && convertedData.race3) {
+                                    // Load 14.4KM data (TEAM)
+                                    race14Data = convertedData.race14;
+                                    document.getElementById('loading-14').style.display = 'none';
+                                    createTable(race14Data, 'table-14', 'Overall', race14Data);
+                                    
+                                    // Load 3.6KM data (Cá Nhân)
+                                    race3Data = convertedData.race3;
                                     document.getElementById('loading-3-overall').style.display = 'none';
                                     document.getElementById('loading-3-female').style.display = 'none';
                                     document.getElementById('loading-3-male').style.display = 'none';
@@ -1042,20 +1107,19 @@
                                     createTable(race3Data, 'table-3-female', 'Female', race3Data);
                                     createTable(race3Data, 'table-3-male', 'Male', race3Data);
                                 } else {
-                                    throw new Error('Dữ liệu trống');
+                                    throw new Error('Dữ liệu không hợp lệ');
                                 }
                             } else {
-                                document.getElementById('loading-3-overall').style.display = 'none';
-                                document.getElementById('loading-3-female').style.display = 'none';
-                                document.getElementById('loading-3-male').style.display = 'none';
-                                document.getElementById('error-3-overall').style.display = 'block';
-                                document.getElementById('error-3-overall').textContent = 'Lỗi: Không tìm thấy dữ liệu';
+                                throw new Error('Không tìm thấy dữ liệu');
                             }
                         })
                         .catch(error => {
+                            document.getElementById('loading-14').style.display = 'none';
                             document.getElementById('loading-3-overall').style.display = 'none';
                             document.getElementById('loading-3-female').style.display = 'none';
                             document.getElementById('loading-3-male').style.display = 'none';
+                            document.getElementById('error-14').style.display = 'block';
+                            document.getElementById('error-14').textContent = `Lỗi: ${error.message}`;
                             document.getElementById('error-3-overall').style.display = 'block';
                             document.getElementById('error-3-overall').textContent = `Lỗi: ${error.message}`;
                             console.error('Firebase error:', error);

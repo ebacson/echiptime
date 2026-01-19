@@ -523,14 +523,21 @@
             // Hide all tabs
             document.querySelectorAll('.tab-content').forEach(tab => {
                 tab.classList.remove('active');
+                tab.style.display = 'none';
             });
             document.querySelectorAll('.tab-button').forEach(btn => {
                 btn.classList.remove('active');
             });
 
             // Show selected tab
-            document.getElementById(tabId).classList.add('active');
-            event.target.classList.add('active');
+            const selectedTab = document.getElementById(tabId);
+            if (selectedTab) {
+                selectedTab.style.display = 'block';
+                selectedTab.classList.add('active');
+            }
+            if (event && event.target) {
+                event.target.classList.add('active');
+            }
         }
 
         function showSubTab(subTabId) {
@@ -1319,11 +1326,21 @@
                 `;
                 
                 // Show distance tabs, hide EKIDEN tabs
-                document.getElementById('race-14').style.display = 'none';
-                document.getElementById('race-3').style.display = 'none';
-                document.getElementById('distance-14').style.display = 'block';
-                document.getElementById('distance-14').classList.add('active');
-                document.getElementById('distance-3').style.display = 'none';
+                const race14 = document.getElementById('race-14');
+                const race3 = document.getElementById('race-3');
+                const distance14 = document.getElementById('distance-14');
+                const distance3 = document.getElementById('distance-3');
+                
+                if (race14) race14.style.display = 'none';
+                if (race3) race3.style.display = 'none';
+                if (distance14) {
+                    distance14.style.display = 'block';
+                    distance14.classList.add('active');
+                }
+                if (distance3) {
+                    distance3.style.display = 'none';
+                    distance3.classList.remove('active');
+                }
             }
         }
 

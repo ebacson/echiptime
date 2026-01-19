@@ -1146,20 +1146,24 @@
             // Check if there are any checkpoint data
             const hasCheckpointData = availableCheckpoints.length > 0;
             
-            // Create header row - if no checkpoint data, only show athlete info
+            // Create header row based on whether we have checkpoint data
+            // If no checkpoint data: show only athlete list (BIB, Name, Gen, Distance)
+            // If has checkpoint data: show full results (BIB, Name, Gen, Distance, Checkpoints, Chip Time)
             const header = hasCheckpointData 
                 ? ['BIB', 'Name', 'Gen', 'Distance', ...availableCheckpoints, 'Chip Time']
                 : ['BIB', 'Name', 'Gen', 'Distance'];
             
-            // Create data rows with checkpoint times and metadata
+            // Create data rows
             const rows = [];
             const rowsMetadata = []; // Store times for split calculation
             
+            // Always process all athletes from Athletes node
             Object.keys(athletes).forEach(tagId => {
                 const athlete = athletes[tagId];
                 if (!athlete) return;
                 
                 if (hasCheckpointData) {
+                    // HAS CHECKPOINT DATA: Show full results with checkpoint times
                     // Get times for this athlete
                     const times = {};
                     availableCheckpoints.forEach(cp => {
@@ -1172,7 +1176,7 @@
                     const finishTime = times['FINISH'];
                     const chipTime = calculateTimeDifference(startTime, finishTime);
                     
-                    // Create row with checkpoint data
+                    // Create row with checkpoint data and chip time
                     const row = [
                         athlete.bib || '',
                         athlete.name || '',
@@ -1191,7 +1195,7 @@
                         athlete: athlete
                     });
                 } else {
-                    // No checkpoint data - just show athlete info
+                    // NO CHECKPOINT DATA: Show only athlete list from Athletes node
                     const row = [
                         athlete.bib || '',
                         athlete.name || '',
@@ -1201,7 +1205,7 @@
                     
                     rows.push(row);
                     
-                    // Store metadata (no times)
+                    // Store metadata (no times since no checkpoint data)
                     rowsMetadata.push({
                         tagId: tagId,
                         times: {},

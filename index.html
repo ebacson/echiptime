@@ -1275,83 +1275,30 @@
                 return;
             }
             
-            // Try to get race name from RACE_CONFIG/event_name first
-            const raceConfigRef = window.firebaseRef(window.firebaseDatabase, 'RACE_CONFIG');
+            // Get race name directly from root level event_name node
+            const eventNameRef = window.firebaseRef(window.firebaseDatabase, 'event_name');
             
-            window.firebaseGet(raceConfigRef)
+            window.firebaseGet(eventNameRef)
                 .then((snapshot) => {
                     if (snapshot.exists()) {
-                        const raceConfig = snapshot.val();
-                        console.log('Found RACE_CONFIG:', raceConfig);
+                        const eventName = snapshot.val();
+                        console.log('Found event_name at root level:', eventName);
                         
-                        if (raceConfig) {
-                            // Try event_name first
-                            const eventName = raceConfig.event_name || raceConfig.EventName || raceConfig.eventName;
-                            console.log('Found event_name:', eventName);
-                            
-                            if (eventName) {
-                                const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
-                                if (nameStr && nameStr.trim() && nameStr.trim().toUpperCase() !== 'NO NAME') {
-                                    updateRaceName(nameStr.trim());
-                                    return;
-                                }
+                        if (eventName) {
+                            const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
+                            if (nameStr && nameStr.trim() && nameStr.trim().toUpperCase() !== 'NO NAME') {
+                                updateRaceName(nameStr.trim());
+                                return;
+                            } else {
+                                console.log('event_name is "NO NAME" or empty, keeping default');
                             }
                         }
                     } else {
-                        console.log('RACE_CONFIG not found in Firebase');
+                        console.log('event_name node not found at root level');
                     }
-                    
-                    // Fallback: Try other possible paths
-                    const possiblePaths = [
-                        'Event', 
-                        'RaceName', 
-                        'EventName',
-                        'NO_NAME/Event', 
-                        'NO_NAME/RaceName',
-                        'NO_NAME/EventName',
-                        'event',
-                        'raceName',
-                        'eventName'
-                    ];
-                    
-                    let pathIndex = 0;
-                    const tryLoadRaceName = () => {
-                        if (pathIndex >= possiblePaths.length) {
-                            console.log('Race name not found in any path, using default');
-                            return;
-                        }
-                        
-                        const path = possiblePaths[pathIndex];
-                        console.log('Trying to load race name from path:', path);
-                        const nameRef = window.firebaseRef(window.firebaseDatabase, path);
-                        
-                        window.firebaseGet(nameRef)
-                            .then((snapshot) => {
-                                if (snapshot.exists()) {
-                                    const raceName = snapshot.val();
-                                    console.log('Found race name at path', path, ':', raceName);
-                                    if (raceName && (typeof raceName === 'string' || typeof raceName === 'object')) {
-                                        const nameStr = typeof raceName === 'string' ? raceName : (raceName.name || raceName.title || JSON.stringify(raceName));
-                                        if (nameStr && nameStr.trim()) {
-                                            updateRaceName(nameStr.trim());
-                                            return;
-                                        }
-                                    }
-                                }
-                                pathIndex++;
-                                tryLoadRaceName();
-                            })
-                            .catch((error) => {
-                                console.log('Error loading from path', path, ':', error);
-                                pathIndex++;
-                                tryLoadRaceName();
-                            });
-                    };
-                    
-                    tryLoadRaceName();
                 })
                 .catch((error) => {
-                    console.log('Error loading RACE_CONFIG:', error);
+                    console.log('Error loading event_name:', error);
                 });
         }
 

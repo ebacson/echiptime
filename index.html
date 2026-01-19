@@ -1242,52 +1242,79 @@
                 });
         }
 
+        // Function to update race name in UI
+        function updateRaceName(raceName) {
+            if (raceName && typeof raceName === 'string' && raceName.trim()) {
+                // Update page title
+                document.title = `Kết quả ${raceName}`;
+                
+                // Update header
+                const titleElement = document.getElementById('race-title');
+                if (titleElement) {
+                    titleElement.textContent = raceName;
+                }
+                console.log('Race name updated:', raceName);
+            }
+        }
+
         // Function to load race name from Firebase
         function loadRaceName() {
             if (!window.firebaseDatabase || !window.firebaseRef || !window.firebaseGet) {
+                console.log('Firebase not ready, retrying...');
+                setTimeout(loadRaceName, 500);
                 return;
             }
             
             // Try to get race name from various possible paths
-            const possiblePaths = ['Event', 'RaceName', 'EventName', 'NO_NAME/Event', 'NO_NAME/RaceName'];
+            const possiblePaths = [
+                'Event', 
+                'RaceName', 
+                'EventName',
+                'NO_NAME/Event', 
+                'NO_NAME/RaceName',
+                'NO_NAME/EventName',
+                'event',
+                'raceName',
+                'eventName'
+            ];
             
-            const tryLoadRaceName = (pathIndex) => {
+            let pathIndex = 0;
+            const tryLoadRaceName = () => {
                 if (pathIndex >= possiblePaths.length) {
+                    console.log('Race name not found in any path, using default');
                     return; // Use default name if not found
                 }
                 
                 const path = possiblePaths[pathIndex];
+                console.log('Trying to load race name from path:', path);
                 const nameRef = window.firebaseRef(window.firebaseDatabase, path);
                 
                 window.firebaseGet(nameRef)
                     .then((snapshot) => {
                         if (snapshot.exists()) {
                             const raceName = snapshot.val();
-                            if (raceName && typeof raceName === 'string' && raceName.trim()) {
-                                // Update page title
-                                document.title = `Kết quả ${raceName}`;
-                                
-                                // Update header
-                                const titleElement = document.getElementById('race-title');
-                                if (titleElement) {
-                                    titleElement.textContent = raceName;
+                            console.log('Found race name at path', path, ':', raceName);
+                            if (raceName && (typeof raceName === 'string' || typeof raceName === 'object')) {
+                                const nameStr = typeof raceName === 'string' ? raceName : (raceName.name || raceName.title || JSON.stringify(raceName));
+                                if (nameStr && nameStr.trim()) {
+                                    updateRaceName(nameStr.trim());
+                                    return; // Found, stop trying
                                 }
-                            } else {
-                                // Try next path
-                                tryLoadRaceName(pathIndex + 1);
                             }
-                        } else {
-                            // Try next path
-                            tryLoadRaceName(pathIndex + 1);
                         }
+                        // Try next path
+                        pathIndex++;
+                        tryLoadRaceName();
                     })
-                    .catch(() => {
+                    .catch((error) => {
+                        console.log('Error loading from path', path, ':', error);
                         // Try next path on error
-                        tryLoadRaceName(pathIndex + 1);
+                        pathIndex++;
+                        tryLoadRaceName();
                     });
             };
             
-            tryLoadRaceName(0);
+            tryLoadRaceName();
         }
 
         // Load data from Firebase when page loads
@@ -1308,13 +1335,13 @@
                                 const firebaseData = snapshot.val();
                                 
                                 // Also try to get race name from NO_NAME if Event/RaceName exists
-                                if (firebaseData.Event || firebaseData.RaceName || firebaseData.EventName) {
-                                    const raceName = firebaseData.Event || firebaseData.RaceName || firebaseData.EventName;
-                                    if (raceName && typeof raceName === 'string' && raceName.trim()) {
-                                        document.title = `Kết quả ${raceName}`;
-                                        const titleElement = document.getElementById('race-title');
-                                        if (titleElement) {
-                                            titleElement.textContent = raceName;
+                                if (firebaseData) {
+                                    const raceName = firebaseData.Event || firebaseData.RaceName || firebaseData.EventName ||
+                                                   firebaseData.event || firebaseData.raceName || firebaseData.eventName;
+                                    if (raceName) {
+                                        const nameStr = typeof raceName === 'string' ? raceName : (raceName.name || raceName.title || JSON.stringify(raceName));
+                                        if (nameStr && nameStr.trim()) {
+                                            updateRaceName(nameStr.trim());
                                         }
                                     }
                                 }

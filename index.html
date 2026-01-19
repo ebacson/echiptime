@@ -707,12 +707,62 @@
                 rankingsData[tableId] = rankings;
             }
             
-            // Sort filtered data by chiptime if column found
-            if (chiptimeIndex >= 0 && filteredData.length > 1) {
+            // Sort filtered data: if finished, sort by chip time; otherwise sort by last checkpoint time
+            if (filteredData.length > 1) {
+                // Find checkpoint indices and chip time index
+                const checkpointIndices = [];
+                let finishIndex = -1;
+                let startIndex = -1;
+                
+                if (filteredData[0]) {
+                    filteredData[0].forEach((cell, index) => {
+                        const cellStr = String(cell || '').trim().toUpperCase();
+                        if (cellStr === 'FINISH' || cellStr.includes('FINISH')) {
+                            finishIndex = index;
+                        } else if (cellStr === 'START' || cellStr.includes('START')) {
+                            startIndex = index;
+                        } else if (cellStr.startsWith('CP') || cellStr.includes('CP1') || cellStr.includes('CP2') || cellStr.includes('CP3')) {
+                            checkpointIndices.push(index);
+                        }
+                    });
+                }
+                
+                // Sort by checkpoint time or chip time
                 const sortedData = [filteredData[0], ...filteredData.slice(1).sort((a, b) => {
-                    const timeA = timeToSeconds(a[chiptimeIndex]);
-                    const timeB = timeToSeconds(b[chiptimeIndex]);
-                    return timeA - timeB;
+                    // If both have finish time, sort by chip time
+                    if (chiptimeIndex >= 0 && a[chiptimeIndex] && b[chiptimeIndex]) {
+                        const timeA = timeToSeconds(a[chiptimeIndex]);
+                        const timeB = timeToSeconds(b[chiptimeIndex]);
+                        if (timeA !== Infinity && timeB !== Infinity) {
+                            return timeA - timeB;
+                        }
+                    }
+                    
+                    // If one has finish time, it comes first
+                    if (finishIndex >= 0) {
+                        const aHasFinish = a[finishIndex] && String(a[finishIndex]).trim();
+                        const bHasFinish = b[finishIndex] && String(b[finishIndex]).trim();
+                        if (aHasFinish && !bHasFinish) return -1;
+                        if (!aHasFinish && bHasFinish) return 1;
+                    }
+                    
+                    // Sort by last checkpoint time (from last to first)
+                    const checkpointsOrder = [...checkpointIndices].reverse(); // Start from last checkpoint
+                    for (const cpIndex of checkpointsOrder) {
+                        const aTime = a[cpIndex] ? timeToSeconds(a[cpIndex]) : Infinity;
+                        const bTime = b[cpIndex] ? timeToSeconds(b[cpIndex]) : Infinity;
+                        
+                        // If both have time at this checkpoint, sort by it
+                        if (aTime !== Infinity && bTime !== Infinity) {
+                            return aTime - bTime;
+                        }
+                        // If only one has time, it comes first
+                        if (aTime !== Infinity && bTime === Infinity) return -1;
+                        if (aTime === Infinity && bTime !== Infinity) return 1;
+                    }
+                    
+                    // If no checkpoint times, maintain original order
+                    return 0;
                 })];
                 filteredData = sortedData;
             }

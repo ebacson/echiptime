@@ -1244,56 +1244,75 @@
 
         // Function to update race name in UI
         function updateRaceName(raceName) {
+            console.log('updateRaceName called with:', raceName);
+            
             if (raceName && typeof raceName === 'string' && raceName.trim()) {
                 // Update page title
-                document.title = `Kết quả ${raceName}`;
+                const newTitle = `Kết quả ${raceName}`;
+                document.title = newTitle;
+                console.log('Page title updated to:', newTitle);
                 
-                // Update header
-                const titleElement = document.getElementById('race-title');
-                if (titleElement) {
-                    titleElement.textContent = raceName;
-                    console.log('Race name updated in UI:', raceName);
-                } else {
-                    console.log('Race title element not found');
-                }
+                // Update header - try multiple times if element not ready
+                const updateHeader = () => {
+                    const titleElement = document.getElementById('race-title');
+                    if (titleElement) {
+                        titleElement.textContent = raceName;
+                        console.log('Header updated successfully to:', raceName);
+                    } else {
+                        console.log('Race title element not found, retrying...');
+                        setTimeout(updateHeader, 100);
+                    }
+                };
+                
+                updateHeader();
             } else {
-                console.log('Invalid race name:', raceName);
+                console.log('Invalid race name:', raceName, 'Type:', typeof raceName);
             }
         }
 
         // Function to load race name from Firebase
         function loadRaceName() {
+            console.log('loadRaceName called');
+            
             if (!window.firebaseDatabase || !window.firebaseRef || !window.firebaseGet) {
-                console.log('Firebase not ready, retrying...');
+                console.log('Firebase not ready, retrying in 500ms...');
                 setTimeout(loadRaceName, 500);
                 return;
             }
             
+            console.log('Firebase is ready, loading event_name...');
+            
             // Get race name directly from root level event_name node
             const eventNameRef = window.firebaseRef(window.firebaseDatabase, 'event_name');
+            console.log('Reading from path: event_name');
             
             window.firebaseGet(eventNameRef)
                 .then((snapshot) => {
+                    console.log('Snapshot received:', snapshot.exists());
                     if (snapshot.exists()) {
                         const eventName = snapshot.val();
-                        console.log('Found event_name at root level:', eventName);
+                        console.log('Found event_name at root level:', eventName, 'Type:', typeof eventName);
                         
-                        if (eventName) {
+                        if (eventName !== null && eventName !== undefined) {
                             const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
+                            console.log('Processed name string:', nameStr);
+                            
                             if (nameStr && nameStr.trim()) {
                                 // Update regardless of value, even if it's "NO NAME"
+                                console.log('Updating race name to:', nameStr.trim());
                                 updateRaceName(nameStr.trim());
-                                return;
                             } else {
-                                console.log('event_name is empty, keeping default');
+                                console.log('event_name is empty string, keeping default');
                             }
+                        } else {
+                            console.log('event_name is null or undefined');
                         }
                     } else {
-                        console.log('event_name node not found at root level');
+                        console.log('event_name node does not exist at root level');
                     }
                 })
                 .catch((error) => {
-                    console.log('Error loading event_name:', error);
+                    console.error('Error loading event_name:', error);
                 });
         }
 
@@ -1306,8 +1325,9 @@
                     
                     // Load race name first (with a small delay to ensure Firebase is ready)
                     setTimeout(() => {
+                        console.log('Calling loadRaceName after Firebase initialization');
                         loadRaceName();
-                    }, 100);
+                    }, 200);
                     
                     // Load all data from Firebase (NO_NAME path)
                     const dataRef = window.firebaseRef(window.firebaseDatabase, 'NO_NAME');

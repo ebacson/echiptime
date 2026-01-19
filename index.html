@@ -1280,44 +1280,69 @@
                 return;
             }
             
-            console.log('Firebase is ready, loading event_name...');
+            console.log('Firebase is ready, loading event_name from root level...');
             
             // Get race name directly from root level event_name node
             const eventNameRef = window.firebaseRef(window.firebaseDatabase, 'event_name');
-            console.log('Reading from path: event_name');
+            console.log('Reading from path: event_name (root level)');
             
             // Use onValue to listen for changes (real-time) and also get initial value
             try {
                 window.firebaseOnValue(eventNameRef, (snapshot) => {
-                    console.log('onValue callback triggered, snapshot exists:', snapshot.exists());
+                    console.log('onValue callback triggered');
+                    console.log('Snapshot exists:', snapshot.exists());
+                    console.log('Snapshot value:', snapshot.val());
+                    
                     if (snapshot.exists()) {
                         const eventName = snapshot.val();
-                        console.log('Found event_name at root level:', eventName, 'Type:', typeof eventName);
+                        console.log('Found event_name at root level:', eventName);
+                        console.log('Type:', typeof eventName);
+                        console.log('Is null?', eventName === null);
+                        console.log('Is undefined?', eventName === undefined);
                         
-                        if (eventName !== null && eventName !== undefined) {
-                            const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
-                            console.log('Processed name string:', nameStr);
-                            
-                            if (nameStr && nameStr.trim()) {
-                                // Update regardless of value, even if it's "NO NAME"
-                                console.log('Updating race name to:', nameStr.trim());
-                                updateRaceName(nameStr.trim());
-                            } else {
-                                console.log('event_name is empty string, keeping default');
-                            }
+                        // Handle all possible value types
+                        let nameStr = '';
+                        if (typeof eventName === 'string') {
+                            nameStr = eventName;
+                        } else if (eventName !== null && eventName !== undefined) {
+                            nameStr = String(eventName);
+                        }
+                        
+                        console.log('Processed name string:', nameStr);
+                        console.log('Trimmed length:', nameStr ? nameStr.trim().length : 0);
+                        
+                        if (nameStr && nameStr.trim().length > 0) {
+                            // Update regardless of value, even if it's "NO NAME"
+                            console.log('Updating race name to:', nameStr.trim());
+                            updateRaceName(nameStr.trim());
                         } else {
-                            console.log('event_name is null or undefined');
+                            console.log('event_name is empty or whitespace only');
                         }
                     } else {
                         console.log('event_name node does not exist at root level');
+                        // Try reading root to see what's there
+                        const rootRef = window.firebaseRef(window.firebaseDatabase, '/');
+                        window.firebaseGet(rootRef).then((rootSnapshot) => {
+                            if (rootSnapshot.exists()) {
+                                const rootData = rootSnapshot.val();
+                                console.log('Root level data:', Object.keys(rootData || {}));
+                                if (rootData && rootData.event_name) {
+                                    console.log('Found event_name in root data:', rootData.event_name);
+                                    updateRaceName(String(rootData.event_name).trim());
+                                }
+                            }
+                        });
                     }
                 }, (error) => {
                     console.error('Error in onValue for event_name:', error);
-                    // Fallback to get() if onValue fails
+                    // Fallback to get()
+                    console.log('Falling back to get()...');
                     window.firebaseGet(eventNameRef)
                         .then((snapshot) => {
+                            console.log('get() snapshot exists:', snapshot.exists());
                             if (snapshot.exists()) {
                                 const eventName = snapshot.val();
+                                console.log('get() found event_name:', eventName);
                                 const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
                                 if (nameStr && nameStr.trim()) {
                                     updateRaceName(nameStr.trim());

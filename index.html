@@ -1420,6 +1420,11 @@
                             console.log('Using first root node as event_name:', firstNodeName);
                             updateRaceName(firstNodeName);
                             
+                            // Load data after updating race name
+                            setTimeout(() => {
+                                loadDataFromFirebase(firstNodeName);
+                            }, 300);
+                            
                             // Set up real-time listener for this node
                             const nodeRef = window.firebaseRef(window.firebaseDatabase, firstNodeName);
                             window.firebaseOnValue(nodeRef, (snap) => {
@@ -1547,31 +1552,10 @@
                 if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet) {
                     clearInterval(checkFirebase);
                     
-                    // Load race name first, then load data
+                    // Load race name first (it will automatically load data)
                     setTimeout(() => {
                         console.log('Calling loadRaceName after Firebase initialization');
                         loadRaceName();
-                        
-                        // After loading race name, wait a bit then load data
-                        setTimeout(() => {
-                            const eventName = document.getElementById('race-title')?.textContent || '';
-                            if (eventName && eventName !== 'Kết quả') {
-                                loadDataFromFirebase(eventName);
-                            } else {
-                                // Fallback: try to get event_name from root
-                                const rootRef = window.firebaseRef(window.firebaseDatabase, '/');
-                                window.firebaseGet(rootRef)
-                                    .then((snapshot) => {
-                                        if (snapshot.exists()) {
-                                            const rootData = snapshot.val();
-                                            const rootKeys = Object.keys(rootData || {});
-                                            if (rootKeys.length > 0) {
-                                                loadDataFromFirebase(rootKeys[0]);
-                                            }
-                                        }
-                                    });
-                            }
-                        }, 500);
                     }, 200);
                 }
             }, 100);

@@ -1282,7 +1282,7 @@
             
             console.log('Firebase is ready, loading event_name from root nodes...');
             
-            // Read all root level nodes - each node is an event_name
+            // Read all root level nodes - each node name is an event_name
             const rootRef = window.firebaseRef(window.firebaseDatabase, '/');
             
             window.firebaseGet(rootRef)
@@ -1292,78 +1292,21 @@
                         const rootKeys = Object.keys(rootData || {});
                         console.log('Root level nodes:', rootKeys);
                         
-                        // If NO_NAME exists, use it as event_name
-                        if (rootData.NO_NAME !== null && rootData.NO_NAME !== undefined) {
-                            const noNameValue = rootData.NO_NAME;
-                            console.log('Found NO_NAME node:', noNameValue, 'Type:', typeof noNameValue);
+                        // Use the first node name as event_name
+                        if (rootKeys.length > 0) {
+                            const firstNodeName = rootKeys[0];
+                            console.log('Using first root node as event_name:', firstNodeName);
+                            updateRaceName(firstNodeName);
                             
-                            let nameStr = '';
-                            if (typeof noNameValue === 'string') {
-                                nameStr = noNameValue;
-                            } else if (typeof noNameValue === 'object' && noNameValue.event_name) {
-                                // If it's an object with event_name property
-                                nameStr = String(noNameValue.event_name);
-                            } else {
-                                // If NO_NAME is an object, use the node name itself or first property
-                                nameStr = 'NO_NAME';
-                            }
-                            
-                            if (nameStr && nameStr.trim().length > 0) {
-                                console.log('Using NO_NAME as event_name:', nameStr.trim());
-                                updateRaceName(nameStr.trim());
-                                
-                                // Set up real-time listener for NO_NAME node
-                                const noNameRef = window.firebaseRef(window.firebaseDatabase, 'NO_NAME');
-                                window.firebaseOnValue(noNameRef, (snap) => {
-                                    if (snap.exists()) {
-                                        const val = snap.val();
-                                        if (typeof val === 'string') {
-                                            updateRaceName(val.trim());
-                                        } else if (val && val.event_name) {
-                                            updateRaceName(String(val.event_name).trim());
-                                        }
-                                    }
-                                });
-                                return;
-                            }
+                            // Set up real-time listener for this node
+                            const nodeRef = window.firebaseRef(window.firebaseDatabase, firstNodeName);
+                            window.firebaseOnValue(nodeRef, (snap) => {
+                                // Node name might change, but we'll keep using the first one
+                                console.log('Node value changed, but keeping node name as event_name');
+                            });
+                        } else {
+                            console.log('No nodes found at root level');
                         }
-                        
-                        // If NO_NAME doesn't exist or is invalid, try other nodes
-                        for (const key of rootKeys) {
-                            const nodeValue = rootData[key];
-                            console.log(`Checking node "${key}":`, nodeValue, 'Type:', typeof nodeValue);
-                            
-                            if (nodeValue !== null && nodeValue !== undefined) {
-                                let nameStr = '';
-                                if (typeof nodeValue === 'string') {
-                                    nameStr = nodeValue;
-                                } else if (typeof nodeValue === 'object' && nodeValue.event_name) {
-                                    nameStr = String(nodeValue.event_name);
-                                } else {
-                                    nameStr = String(nodeValue);
-                                }
-                                
-                                if (nameStr && nameStr.trim().length > 0) {
-                                    console.log(`Found event_name in node "${key}":`, nameStr.trim());
-                                    updateRaceName(nameStr.trim());
-                                    
-                                    // Set up real-time listener
-                                    const nodeRef = window.firebaseRef(window.firebaseDatabase, key);
-                                    window.firebaseOnValue(nodeRef, (snap) => {
-                                        if (snap.exists()) {
-                                            const val = snap.val();
-                                            const str = typeof val === 'string' ? val : String(val);
-                                            if (str && str.trim()) {
-                                                updateRaceName(str.trim());
-                                            }
-                                        }
-                                    });
-                                    return;
-                                }
-                            }
-                        }
-                        
-                        console.log('No valid event_name found in root nodes');
                     } else {
                         console.log('Root does not exist');
                     }

@@ -1344,42 +1344,21 @@
                         tryLoadFromPath();
                     }
                 }, (error) => {
-                    console.error('Error in onValue for event_name:', error);
-                    // Fallback to get()
-                    console.log('Falling back to get()...');
-                    window.firebaseGet(eventNameRef)
-                        .then((snapshot) => {
-                            console.log('get() snapshot exists:', snapshot.exists());
-                            if (snapshot.exists()) {
-                                const eventName = snapshot.val();
-                                console.log('get() found event_name:', eventName);
-                                const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
-                                if (nameStr && nameStr.trim()) {
-                                    updateRaceName(nameStr.trim());
-                                }
-                            }
-                        })
-                        .catch((err) => {
-                            console.error('Error in get() fallback:', err);
-                        });
+                    console.error(`Error in onValue for path "${path}":`, error);
+                    // Try next path on error
+                    pathIndex++;
+                    tryLoadFromPath();
                 });
-            } catch (error) {
-                console.error('Error setting up onValue listener:', error);
-                // Fallback to get()
-                window.firebaseGet(eventNameRef)
-                    .then((snapshot) => {
-                        if (snapshot.exists()) {
-                            const eventName = snapshot.val();
-                            const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
-                            if (nameStr && nameStr.trim()) {
-                                updateRaceName(nameStr.trim());
-                            }
-                        }
-                    })
-                    .catch((err) => {
-                        console.error('Error in get() fallback:', err);
-                    });
-            }
+                } catch (error) {
+                    console.error(`Error setting up onValue listener for path "${path}":`, error);
+                    // Try next path on error
+                    pathIndex++;
+                    tryLoadFromPath();
+                }
+            };
+            
+            // Start trying paths
+            tryLoadFromPath();
         }
 
         // Load data from Firebase when page loads

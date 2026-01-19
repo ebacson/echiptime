@@ -601,19 +601,32 @@
         const tableMetadata = {};
 
         function createTable(data, tableId, genderFilter = 'Overall', originalData = null, metadata = null, checkpoints = null) {
-            // Store metadata for this table
-            if (metadata) {
-                tableMetadata[tableId] = metadata;
-            }
-            if (checkpoints) {
-                tableMetadata[tableId + '_checkpoints'] = checkpoints;
-            }
-            
             // Use original data if provided, otherwise use filtered data
             const dataForRanking = originalData || data;
             
             // Filter data by gender if needed
             let filteredData = filterDataByGender(data, genderFilter);
+            
+            // Filter metadata by gender if needed
+            let filteredMetadata = metadata;
+            if (metadata && genderFilter !== 'Overall') {
+                filteredMetadata = metadata.filter(item => {
+                    if (!item || !item.athlete) return false;
+                    const gender = String(item.athlete.gen || '').trim().toLowerCase();
+                    const targetGender = genderFilter.toLowerCase();
+                    return gender === targetGender || 
+                           (targetGender === 'female' && (gender === 'f' || gender === 'nữ')) ||
+                           (targetGender === 'male' && (gender === 'm' || gender === 'nam'));
+                });
+            }
+            
+            // Store metadata for this table (use filtered metadata)
+            if (filteredMetadata) {
+                tableMetadata[tableId] = filteredMetadata;
+            }
+            if (checkpoints) {
+                tableMetadata[tableId + '_checkpoints'] = checkpoints;
+            }
             
             if (!filteredData || filteredData.length === 0) {
                 document.getElementById(tableId).innerHTML = '<p style="text-align: center; padding: 20px;">Không có dữ liệu</p>';
@@ -776,36 +789,63 @@
                 // Show split times if metadata is available
                 const metadata = tableMetadata[tableId];
                 const checkpoints = tableMetadata[tableId + '_checkpoints'];
-                if (metadata && checkpoints && metadata[i - 1]) {
-                    const athleteMetadata = metadata[i - 1];
+                
+                // Find metadata by BIB or Name instead of index
+                let athleteMetadata = null;
+                if (metadata && checkpoints && Array.isArray(metadata)) {
+                    const bibValue = bibIndex >= 0 ? String(filteredData[i][bibIndex] || '').trim() : '';
+                    const nameValue = nameIndex >= 0 ? String(filteredData[i][nameIndex] || '').trim() : '';
+                    
+                    athleteMetadata = metadata.find(item => {
+                        if (!item || !item.athlete) return false;
+                        const itemBib = String(item.athlete.bib || '').trim();
+                        const itemName = String(item.athlete.name || '').trim();
+                        
+                        // Match by BIB if available, otherwise by Name
+                        if (bibValue && itemBib) {
+                            return itemBib === bibValue;
+                        }
+                        if (nameValue && itemName) {
+                            return itemName === nameValue;
+                        }
+                        return false;
+                    });
+                }
+                
+                if (athleteMetadata && checkpoints && Array.isArray(checkpoints)) {
                     const times = athleteMetadata.times || {};
                     
-                    html += '<strong style="color: #ff66b3; font-size: 1em;">Split Time:</strong><br>';
+                    // Only show split time if we have at least START and one other checkpoint
+                    const hasStart = times['START'] !== null && times['START'] !== undefined;
+                    const hasOtherCheckpoint = checkpoints.some(cp => cp !== 'START' && times[cp]);
                     
-                    // Calculate and show split times
-                    let prevTime = times['START'];
-                    checkpoints.forEach((cp, cpIndex) => {
-                        if (cp === 'START') {
-                            prevTime = times['START'];
-                            return;
-                        }
+                    if (hasStart && hasOtherCheckpoint) {
+                        html += '<strong style="color: #ff66b3; font-size: 1em;">Split Time:</strong><br>';
                         
-                        const currentTime = times[cp];
-                        if (currentTime && prevTime) {
-                            const splitTime = calculateTimeDifference(prevTime, currentTime);
-                            html += `<span class="detail-label">${cp}:</span>`;
-                            html += `<span class="detail-content"><strong>${splitTime}</strong></span><br>`;
-                            prevTime = currentTime;
+                        // Calculate and show split times
+                        let prevTime = times['START'];
+                        checkpoints.forEach((cp) => {
+                            if (cp === 'START') {
+                                return; // Skip START, it's the starting point
+                            }
+                            
+                            const currentTime = times[cp];
+                            if (currentTime && prevTime) {
+                                const splitTime = calculateTimeDifference(prevTime, currentTime);
+                                html += `<span class="detail-label">${cp}:</span>`;
+                                html += `<span class="detail-content"><strong>${splitTime}</strong></span><br>`;
+                                prevTime = currentTime;
+                            }
+                        });
+                        
+                        // Show total chip time
+                        if (times['START'] && times['FINISH']) {
+                            const chipTime = calculateTimeDifference(times['START'], times['FINISH']);
+                            html += `<span class="detail-label">Chip Time:</span>`;
+                            html += `<span class="detail-content"><strong>${chipTime}</strong></span><br><br>`;
+                        } else {
+                            html += '<br>';
                         }
-                    });
-                    
-                    // Show total chip time
-                    if (times['START'] && times['FINISH']) {
-                        const chipTime = calculateTimeDifference(times['START'], times['FINISH']);
-                        html += `<span class="detail-label">Chip Time:</span>`;
-                        html += `<span class="detail-content"><strong>${chipTime}</strong></span><br><br>`;
-                    } else {
-                        html += '<br>';
                     }
                 }
                 

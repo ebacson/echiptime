@@ -842,7 +842,18 @@
                         if (times['START'] && times['FINISH']) {
                             const chipTime = calculateTimeDifference(times['START'], times['FINISH']);
                             html += `<span class="detail-label">Chip Time:</span>`;
-                            html += `<span class="detail-content"><strong>${chipTime}</strong></span><br><br>`;
+                            html += `<span class="detail-content"><strong>${chipTime}</strong></span><br>`;
+                            
+                            // Calculate and show Pace
+                            const distanceStr = athleteMetadata.athlete?.distance || '';
+                            const distance = parseDistance(distanceStr);
+                            if (distance > 0) {
+                                const chipTimeInSeconds = (times['FINISH'] - times['START']) / 1000;
+                                const pace = calculatePace(chipTimeInSeconds, distance);
+                                html += `<span class="detail-label">Pace:</span>`;
+                                html += `<span class="detail-content"><strong>${pace}</strong></span><br>`;
+                            }
+                            html += '<br>';
                         } else {
                             html += '<br>';
                         }
@@ -1025,6 +1036,39 @@
             const minutes = Math.floor((diff % 3600) / 60);
             const seconds = Math.floor(diff % 60);
             return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        // Function to calculate Pace (time per km) from time in seconds and distance in km
+        function calculatePace(timeInSeconds, distanceInKm) {
+            if (!timeInSeconds || !distanceInKm || distanceInKm <= 0) return '';
+            const paceInSeconds = timeInSeconds / distanceInKm;
+            const minutes = Math.floor(paceInSeconds / 60);
+            const seconds = Math.floor(paceInSeconds % 60);
+            return `${minutes}:${seconds.toString().padStart(2, '0')}/km`;
+        }
+
+        // Function to parse distance string to number (e.g., "14.4KM" -> 14.4)
+        function parseDistance(distanceStr) {
+            if (!distanceStr) return 0;
+            const str = String(distanceStr).trim().toUpperCase();
+            // Remove "KM" and convert to number
+            const numStr = str.replace(/KM$/, '').trim();
+            const num = parseFloat(numStr);
+            return isNaN(num) ? 0 : num;
+        }
+
+        // Function to convert time string (HH:MM:SS) to seconds
+        function timeStringToSeconds(timeStr) {
+            if (!timeStr) return 0;
+            const parts = String(timeStr).split(':');
+            if (parts.length === 3) {
+                // HH:MM:SS
+                return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+            } else if (parts.length === 2) {
+                // MM:SS
+                return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+            }
+            return 0;
         }
 
         // Function to get earliest time from lines

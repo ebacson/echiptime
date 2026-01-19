@@ -434,88 +434,8 @@
             </div>
         </div>
 
-        <!-- Distance mode: 14.4KM and 3.6KM with sub-tabs -->
-        <div id="distance-14" class="tab-content" style="display: none;">
-            <div class="sub-tabs">
-                <button class="sub-tab-button active" onclick="showSubTab('overall-14')">Overall</button>
-                <button class="sub-tab-button" onclick="showSubTab('female-14')">Female</button>
-                <button class="sub-tab-button" onclick="showSubTab('male-14')">Male</button>
-            </div>
-            
-            <div id="overall-14" class="sub-tab-content active">
-                <div class="search-container">
-                    <input type="text" id="search-14-overall" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-14-overall', 'search-14-overall')">
-                </div>
-                <div class="table-container">
-                    <div id="loading-14-overall" class="loading">Đang tải dữ liệu...</div>
-                    <div id="error-14-overall" class="error" style="display: none;"></div>
-                    <div id="table-14-overall"></div>
-                </div>
-            </div>
-            
-            <div id="female-14" class="sub-tab-content">
-                <div class="search-container">
-                    <input type="text" id="search-14-female" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-14-female', 'search-14-female')">
-                </div>
-                <div class="table-container">
-                    <div id="loading-14-female" class="loading">Đang tải dữ liệu...</div>
-                    <div id="error-14-female" class="error" style="display: none;"></div>
-                    <div id="table-14-female"></div>
-                </div>
-            </div>
-            
-            <div id="male-14" class="sub-tab-content">
-                <div class="search-container">
-                    <input type="text" id="search-14-male" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-14-male', 'search-14-male')">
-                </div>
-                <div class="table-container">
-                    <div id="loading-14-male" class="loading">Đang tải dữ liệu...</div>
-                    <div id="error-14-male" class="error" style="display: none;"></div>
-                    <div id="table-14-male"></div>
-                </div>
-            </div>
-        </div>
-
-        <div id="distance-3" class="tab-content" style="display: none;">
-            <div class="sub-tabs">
-                <button class="sub-tab-button active" onclick="showSubTab('overall-3-dist')">Overall</button>
-                <button class="sub-tab-button" onclick="showSubTab('female-3-dist')">Female</button>
-                <button class="sub-tab-button" onclick="showSubTab('male-3-dist')">Male</button>
-            </div>
-            
-            <div id="overall-3-dist" class="sub-tab-content active">
-                <div class="search-container">
-                    <input type="text" id="search-3-dist-overall" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-3-dist-overall', 'search-3-dist-overall')">
-                </div>
-                <div class="table-container">
-                    <div id="loading-3-dist-overall" class="loading">Đang tải dữ liệu...</div>
-                    <div id="error-3-dist-overall" class="error" style="display: none;"></div>
-                    <div id="table-3-dist-overall"></div>
-                </div>
-            </div>
-            
-            <div id="female-3-dist" class="sub-tab-content">
-                <div class="search-container">
-                    <input type="text" id="search-3-dist-female" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-3-dist-female', 'search-3-dist-female')">
-                </div>
-                <div class="table-container">
-                    <div id="loading-3-dist-female" class="loading">Đang tải dữ liệu...</div>
-                    <div id="error-3-dist-female" class="error" style="display: none;"></div>
-                    <div id="table-3-dist-female"></div>
-                </div>
-            </div>
-            
-            <div id="male-3-dist" class="sub-tab-content">
-                <div class="search-container">
-                    <input type="text" id="search-3-dist-male" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-3-dist-male', 'search-3-dist-male')">
-                </div>
-                <div class="table-container">
-                    <div id="loading-3-dist-male" class="loading">Đang tải dữ liệu...</div>
-                    <div id="error-3-dist-male" class="error" style="display: none;"></div>
-                    <div id="table-3-dist-male"></div>
-                </div>
-            </div>
-        </div>
+        <!-- Distance mode: tabs will be created dynamically -->
+        <div id="distance-tabs-container"></div>
     </div>
 
     <script>
@@ -1262,40 +1182,39 @@
                 });
             });
             
-            // Filter rows by distance - check multiple possible formats
-            const race14Rows = [];
-            const race14Metadata = [];
-            const race3Rows = [];
-            const race3Metadata = [];
+            // Group rows by distance dynamically
+            const distanceGroups = {};
             
             rows.forEach((row, index) => {
-                const distance = String(row[3] || '').trim().toUpperCase();
-                // Check for 14.4KM in various formats
-                if (distance === '14.4KM' || distance === '14.4' || distance === '14,4KM' || 
-                    distance.includes('14.4') || distance.includes('14,4')) {
-                    race14Rows.push(row);
-                    race14Metadata.push(rowsMetadata[index]);
-                } 
-                // Check for 3.6KM in various formats
-                else if (distance === '3.6KM' || distance === '3.6' || distance === '3,6KM' || 
-                         distance.includes('3.6') || distance.includes('3,6')) {
-                    race3Rows.push(row);
-                    race3Metadata.push(rowsMetadata[index]);
+                const distance = String(row[3] || '').trim();
+                if (!distance) return; // Skip rows without distance
+                
+                // Normalize distance key (use original format as key)
+                const distanceKey = distance;
+                
+                if (!distanceGroups[distanceKey]) {
+                    distanceGroups[distanceKey] = {
+                        rows: [],
+                        metadata: []
+                    };
                 }
+                
+                distanceGroups[distanceKey].rows.push(row);
+                distanceGroups[distanceKey].metadata.push(rowsMetadata[index]);
             });
             
-            return {
-                race14: {
-                    data: [header, ...race14Rows],
-                    metadata: race14Metadata,
-                    checkpoints: availableCheckpoints
-                },
-                race3: {
-                    data: [header, ...race3Rows],
-                    metadata: race3Metadata,
-                    checkpoints: availableCheckpoints
-                }
-            };
+            // Convert to return format
+            const result = {};
+            Object.keys(distanceGroups).forEach(distanceKey => {
+                result[distanceKey] = {
+                    data: [header, ...distanceGroups[distanceKey].rows],
+                    metadata: distanceGroups[distanceKey].metadata,
+                    checkpoints: availableCheckpoints,
+                    distance: distanceKey
+                };
+            });
+            
+            return result;
         }
 
         // Function to setup tabs based on event_name
@@ -1325,22 +1244,13 @@
                     <button class="tab-button" onclick="showTab('distance-3')">3.6KM</button>
                 `;
                 
-                // Show distance tabs, hide EKIDEN tabs
+                // Distance mode: tabs will be created dynamically based on data
+                // This will be handled in loadDataFromFirebase after data is loaded
+                // Hide EKIDEN tabs
                 const race14 = document.getElementById('race-14');
                 const race3 = document.getElementById('race-3');
-                const distance14 = document.getElementById('distance-14');
-                const distance3 = document.getElementById('distance-3');
-                
                 if (race14) race14.style.display = 'none';
                 if (race3) race3.style.display = 'none';
-                if (distance14) {
-                    distance14.style.display = 'block';
-                    distance14.classList.add('active');
-                }
-                if (distance3) {
-                    distance3.style.display = 'none';
-                    distance3.classList.remove('active');
-                }
             }
         }
 
@@ -1444,21 +1354,36 @@
                         
                         const convertedData = convertFirebaseDataToArray({ [eventName]: firebaseData });
                         
-                        if (convertedData && convertedData.race14 && convertedData.race3) {
-                            // Get current event_name to determine mode
-                            const isEkiden = eventName.includes('EKIDEN') || eventName.includes('Ekiden');
+                        if (!convertedData || Object.keys(convertedData).length === 0) {
+                            throw new Error('Dữ liệu không hợp lệ');
+                        }
+                        
+                        // Get current event_name to determine mode
+                        const isEkiden = eventName.includes('EKIDEN') || eventName.includes('Ekiden');
+                        
+                        if (isEkiden) {
+                            // EKIDEN mode: TEAM and Cá Nhân
+                            // Find 14.4KM and 3.6KM data
+                            let race14Data = null;
+                            let race3Data = null;
                             
-                            if (isEkiden) {
-                                // EKIDEN mode: TEAM and Cá Nhân
-                                // Load 14.4KM data (TEAM)
-                                race14Data = convertedData.race14.data;
+                            Object.keys(convertedData).forEach(distanceKey => {
+                                const distance = String(distanceKey).trim().toUpperCase();
+                                if (distance.includes('14.4') || distance.includes('14,4')) {
+                                    race14Data = convertedData[distanceKey];
+                                } else if (distance.includes('3.6') || distance.includes('3,6')) {
+                                    race3Data = convertedData[distanceKey];
+                                }
+                            });
+                            
+                            if (race14Data) {
                                 const loading14 = document.getElementById('loading-14');
                                 if (loading14) loading14.style.display = 'none';
-                                createTable(race14Data, 'table-14', 'Overall', race14Data, 
-                                           convertedData.race14.metadata, convertedData.race14.checkpoints);
-                                
-                                // Load 3.6KM data (Cá Nhân)
-                                race3Data = convertedData.race3.data;
+                                createTable(race14Data.data, 'table-14', 'Overall', race14Data.data, 
+                                           race14Data.metadata, race14Data.checkpoints);
+                            }
+                            
+                            if (race3Data) {
                                 const loading3Overall = document.getElementById('loading-3-overall');
                                 const loading3Female = document.getElementById('loading-3-female');
                                 const loading3Male = document.getElementById('loading-3-male');
@@ -1466,48 +1391,44 @@
                                 if (loading3Female) loading3Female.style.display = 'none';
                                 if (loading3Male) loading3Male.style.display = 'none';
                                 
-                                createTable(race3Data, 'table-3-overall', 'Overall', race3Data,
-                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
-                                createTable(race3Data, 'table-3-female', 'Female', race3Data,
-                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
-                                createTable(race3Data, 'table-3-male', 'Male', race3Data,
-                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
-                            } else {
-                                // Distance mode: 14.4KM and 3.6KM with sub-tabs
-                                // Load 14.4KM data with sub-tabs
-                                race14Data = convertedData.race14.data;
-                                const loading14Overall = document.getElementById('loading-14-overall');
-                                const loading14Female = document.getElementById('loading-14-female');
-                                const loading14Male = document.getElementById('loading-14-male');
-                                if (loading14Overall) loading14Overall.style.display = 'none';
-                                if (loading14Female) loading14Female.style.display = 'none';
-                                if (loading14Male) loading14Male.style.display = 'none';
-                                
-                                createTable(race14Data, 'table-14-overall', 'Overall', race14Data,
-                                           convertedData.race14.metadata, convertedData.race14.checkpoints);
-                                createTable(race14Data, 'table-14-female', 'Female', race14Data,
-                                           convertedData.race14.metadata, convertedData.race14.checkpoints);
-                                createTable(race14Data, 'table-14-male', 'Male', race14Data,
-                                           convertedData.race14.metadata, convertedData.race14.checkpoints);
-                                
-                                // Load 3.6KM data with sub-tabs
-                                race3Data = convertedData.race3.data;
-                                const loading3DistOverall = document.getElementById('loading-3-dist-overall');
-                                const loading3DistFemale = document.getElementById('loading-3-dist-female');
-                                const loading3DistMale = document.getElementById('loading-3-dist-male');
-                                if (loading3DistOverall) loading3DistOverall.style.display = 'none';
-                                if (loading3DistFemale) loading3DistFemale.style.display = 'none';
-                                if (loading3DistMale) loading3DistMale.style.display = 'none';
-                                
-                                createTable(race3Data, 'table-3-dist-overall', 'Overall', race3Data,
-                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
-                                createTable(race3Data, 'table-3-dist-female', 'Female', race3Data,
-                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
-                                createTable(race3Data, 'table-3-dist-male', 'Male', race3Data,
-                                           convertedData.race3.metadata, convertedData.race3.checkpoints);
+                                createTable(race3Data.data, 'table-3-overall', 'Overall', race3Data.data,
+                                           race3Data.metadata, race3Data.checkpoints);
+                                createTable(race3Data.data, 'table-3-female', 'Female', race3Data.data,
+                                           race3Data.metadata, race3Data.checkpoints);
+                                createTable(race3Data.data, 'table-3-male', 'Male', race3Data.data,
+                                           race3Data.metadata, race3Data.checkpoints);
                             }
                         } else {
-                            throw new Error('Dữ liệu không hợp lệ');
+                            // Distance mode: create tabs dynamically based on distances found
+                            const distances = Object.keys(convertedData);
+                            if (distances.length === 0) {
+                                throw new Error('Không tìm thấy dữ liệu cự ly');
+                            }
+                            
+                            // Create tabs for all distances
+                            createDistanceTabs(distances);
+                            
+                            // Load data for each distance
+                            distances.forEach((distance, index) => {
+                                const distanceData = convertedData[distance];
+                                if (!distanceData) return;
+                                
+                                // Hide loading indicators
+                                const loadingOverall = document.getElementById(`loading-${index}-overall`);
+                                const loadingFemale = document.getElementById(`loading-${index}-female`);
+                                const loadingMale = document.getElementById(`loading-${index}-male`);
+                                if (loadingOverall) loadingOverall.style.display = 'none';
+                                if (loadingFemale) loadingFemale.style.display = 'none';
+                                if (loadingMale) loadingMale.style.display = 'none';
+                                
+                                // Create tables for each gender
+                                createTable(distanceData.data, `table-${index}-overall`, 'Overall', distanceData.data,
+                                           distanceData.metadata, distanceData.checkpoints);
+                                createTable(distanceData.data, `table-${index}-female`, 'Female', distanceData.data,
+                                           distanceData.metadata, distanceData.checkpoints);
+                                createTable(distanceData.data, `table-${index}-male`, 'Male', distanceData.data,
+                                           distanceData.metadata, distanceData.checkpoints);
+                            });
                         }
                     } else {
                         throw new Error('Không tìm thấy dữ liệu');

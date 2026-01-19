@@ -1274,7 +1274,7 @@
         function loadRaceName() {
             console.log('loadRaceName called');
             
-            if (!window.firebaseDatabase || !window.firebaseRef || !window.firebaseGet) {
+            if (!window.firebaseDatabase || !window.firebaseRef || !window.firebaseGet || !window.firebaseOnValue) {
                 console.log('Firebase not ready, retrying in 500ms...');
                 setTimeout(loadRaceName, 500);
                 return;
@@ -1286,9 +1286,10 @@
             const eventNameRef = window.firebaseRef(window.firebaseDatabase, 'event_name');
             console.log('Reading from path: event_name');
             
-            window.firebaseGet(eventNameRef)
-                .then((snapshot) => {
-                    console.log('Snapshot received:', snapshot.exists());
+            // Use onValue to listen for changes (real-time) and also get initial value
+            try {
+                window.firebaseOnValue(eventNameRef, (snapshot) => {
+                    console.log('onValue callback triggered, snapshot exists:', snapshot.exists());
                     if (snapshot.exists()) {
                         const eventName = snapshot.val();
                         console.log('Found event_name at root level:', eventName, 'Type:', typeof eventName);
@@ -1310,10 +1311,40 @@
                     } else {
                         console.log('event_name node does not exist at root level');
                     }
-                })
-                .catch((error) => {
-                    console.error('Error loading event_name:', error);
+                }, (error) => {
+                    console.error('Error in onValue for event_name:', error);
+                    // Fallback to get() if onValue fails
+                    window.firebaseGet(eventNameRef)
+                        .then((snapshot) => {
+                            if (snapshot.exists()) {
+                                const eventName = snapshot.val();
+                                const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
+                                if (nameStr && nameStr.trim()) {
+                                    updateRaceName(nameStr.trim());
+                                }
+                            }
+                        })
+                        .catch((err) => {
+                            console.error('Error in get() fallback:', err);
+                        });
                 });
+            } catch (error) {
+                console.error('Error setting up onValue listener:', error);
+                // Fallback to get()
+                window.firebaseGet(eventNameRef)
+                    .then((snapshot) => {
+                        if (snapshot.exists()) {
+                            const eventName = snapshot.val();
+                            const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
+                            if (nameStr && nameStr.trim()) {
+                                updateRaceName(nameStr.trim());
+                            }
+                        }
+                    })
+                    .catch((err) => {
+                        console.error('Error in get() fallback:', err);
+                    });
+            }
         }
 
         // Load data from Firebase when page loads

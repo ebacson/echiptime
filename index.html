@@ -1280,85 +1280,67 @@
                 return;
             }
             
-            console.log('Firebase is ready, loading event_name...');
+            console.log('Firebase is ready, loading event_name from root nodes...');
             
-            // Try multiple paths: root level, NO_NAME/event_name, RACE_CONFIG/event_name
-            const tryPaths = [
-                'event_name',           // Root level
-                'NO_NAME/event_name',  // Inside NO_NAME
-                'RACE_CONFIG/event_name' // Inside RACE_CONFIG
-            ];
+            // Read all root level nodes - each node is an event_name
+            const rootRef = window.firebaseRef(window.firebaseDatabase, '/');
             
-            let pathIndex = 0;
-            
-            const tryLoadFromPath = () => {
-                if (pathIndex >= tryPaths.length) {
-                    console.log('Tried all paths, event_name not found');
-                    return;
-                }
-                
-                const path = tryPaths[pathIndex];
-                console.log(`Trying path ${pathIndex + 1}/${tryPaths.length}: ${path}`);
-                const eventNameRef = window.firebaseRef(window.firebaseDatabase, path);
-                
-                // Use onValue to listen for changes (real-time) and also get initial value
-                try {
-                    window.firebaseOnValue(eventNameRef, (snapshot) => {
-                    console.log('onValue callback triggered');
-                    console.log('Snapshot exists:', snapshot.exists());
-                    console.log('Snapshot value:', snapshot.val());
-                    
+            window.firebaseGet(rootRef)
+                .then((snapshot) => {
                     if (snapshot.exists()) {
-                        const eventName = snapshot.val();
-                        console.log('Found event_name at root level:', eventName);
-                        console.log('Type:', typeof eventName);
-                        console.log('Is null?', eventName === null);
-                        console.log('Is undefined?', eventName === undefined);
+                        const rootData = snapshot.val();
+                        const rootKeys = Object.keys(rootData || {});
+                        console.log('Root level nodes:', rootKeys);
                         
-                        // Handle all possible value types
-                        let nameStr = '';
-                        if (typeof eventName === 'string') {
-                            nameStr = eventName;
-                        } else if (eventName !== null && eventName !== undefined) {
-                            nameStr = String(eventName);
+                        // Find the first node that is not NO_NAME (or use the first string value)
+                        // Each node at root level is an event_name
+                        for (const key of rootKeys) {
+                            if (key === 'NO_NAME') {
+                                continue; // Skip NO_NAME node
+                            }
+                            
+                            const nodeValue = rootData[key];
+                            console.log(`Checking node "${key}":`, nodeValue, 'Type:', typeof nodeValue);
+                            
+                            if (nodeValue !== null && nodeValue !== undefined) {
+                                let nameStr = '';
+                                if (typeof nodeValue === 'string') {
+                                    nameStr = nodeValue;
+                                } else if (typeof nodeValue === 'object' && nodeValue.event_name) {
+                                    // If it's an object with event_name property
+                                    nameStr = String(nodeValue.event_name);
+                                } else {
+                                    nameStr = String(nodeValue);
+                                }
+                                
+                                if (nameStr && nameStr.trim().length > 0) {
+                                    console.log(`Found event_name in node "${key}":`, nameStr.trim());
+                                    updateRaceName(nameStr.trim());
+                                    
+                                    // Also set up real-time listener for this node
+                                    const nodeRef = window.firebaseRef(window.firebaseDatabase, key);
+                                    window.firebaseOnValue(nodeRef, (snap) => {
+                                        if (snap.exists()) {
+                                            const val = snap.val();
+                                            const str = typeof val === 'string' ? val : String(val);
+                                            if (str && str.trim()) {
+                                                updateRaceName(str.trim());
+                                            }
+                                        }
+                                    });
+                                    return; // Found, stop checking
+                                }
+                            }
                         }
                         
-                        console.log('Processed name string:', nameStr);
-                        console.log('Trimmed length:', nameStr ? nameStr.trim().length : 0);
-                        
-                        if (nameStr && nameStr.trim().length > 0) {
-                            // Update regardless of value, even if it's "NO NAME"
-                            console.log(`Found event_name at path "${path}":`, nameStr.trim());
-                            updateRaceName(nameStr.trim());
-                            return; // Found, stop trying other paths
-                        } else {
-                            console.log(`event_name at path "${path}" is empty or whitespace only`);
-                            // Try next path
-                            pathIndex++;
-                            tryLoadFromPath();
-                        }
+                        console.log('No valid event_name found in root nodes');
                     } else {
-                        console.log(`event_name node does not exist at path: ${path}`);
-                        // Try next path
-                        pathIndex++;
-                        tryLoadFromPath();
+                        console.log('Root does not exist');
                     }
-                }, (error) => {
-                    console.error(`Error in onValue for path "${path}":`, error);
-                    // Try next path on error
-                    pathIndex++;
-                    tryLoadFromPath();
+                })
+                .catch((error) => {
+                    console.error('Error reading root nodes:', error);
                 });
-                } catch (error) {
-                    console.error(`Error setting up onValue listener for path "${path}":`, error);
-                    // Try next path on error
-                    pathIndex++;
-                    tryLoadFromPath();
-                }
-            };
-            
-            // Start trying paths
-            tryLoadFromPath();
         }
 
         // Load data from Firebase when page loads

@@ -1139,8 +1139,13 @@
                 }
             });
             
-            // Create header row with only available checkpoints
-            const header = ['BIB', 'Name', 'Gen', 'Distance', ...availableCheckpoints, 'Chip Time'];
+            // Check if there are any checkpoint data
+            const hasCheckpointData = availableCheckpoints.length > 0;
+            
+            // Create header row - if no checkpoint data, only show athlete info
+            const header = hasCheckpointData 
+                ? ['BIB', 'Name', 'Gen', 'Distance', ...availableCheckpoints, 'Chip Time']
+                : ['BIB', 'Name', 'Gen', 'Distance'];
             
             // Create data rows with checkpoint times and metadata
             const rows = [];
@@ -1150,36 +1155,55 @@
                 const athlete = athletes[tagId];
                 if (!athlete) return;
                 
-                // Get times for this athlete
-                const times = {};
-                availableCheckpoints.forEach(cp => {
-                    const lines = checkpointData[cp][tagId]?.lines || {};
-                    times[cp] = getEarliestTime(lines);
-                });
-                
-                // Calculate Chip Time (FINISH - START)
-                const startTime = times['START'];
-                const finishTime = times['FINISH'];
-                const chipTime = calculateTimeDifference(startTime, finishTime);
-                
-                // Create row
-                const row = [
-                    athlete.bib || '',
-                    athlete.name || '',
-                    athlete.gen || '',
-                    athlete.distance || '',
-                    ...availableCheckpoints.map(cp => times[cp] ? formatTime(times[cp]) : ''),
-                    chipTime
-                ];
-                
-                rows.push(row);
-                
-                // Store metadata for split time calculation
-                rowsMetadata.push({
-                    tagId: tagId,
-                    times: times,
-                    athlete: athlete
-                });
+                if (hasCheckpointData) {
+                    // Get times for this athlete
+                    const times = {};
+                    availableCheckpoints.forEach(cp => {
+                        const lines = checkpointData[cp][tagId]?.lines || {};
+                        times[cp] = getEarliestTime(lines);
+                    });
+                    
+                    // Calculate Chip Time (FINISH - START)
+                    const startTime = times['START'];
+                    const finishTime = times['FINISH'];
+                    const chipTime = calculateTimeDifference(startTime, finishTime);
+                    
+                    // Create row with checkpoint data
+                    const row = [
+                        athlete.bib || '',
+                        athlete.name || '',
+                        athlete.gen || '',
+                        athlete.distance || '',
+                        ...availableCheckpoints.map(cp => times[cp] ? formatTime(times[cp]) : ''),
+                        chipTime
+                    ];
+                    
+                    rows.push(row);
+                    
+                    // Store metadata for split time calculation
+                    rowsMetadata.push({
+                        tagId: tagId,
+                        times: times,
+                        athlete: athlete
+                    });
+                } else {
+                    // No checkpoint data - just show athlete info
+                    const row = [
+                        athlete.bib || '',
+                        athlete.name || '',
+                        athlete.gen || '',
+                        athlete.distance || ''
+                    ];
+                    
+                    rows.push(row);
+                    
+                    // Store metadata (no times)
+                    rowsMetadata.push({
+                        tagId: tagId,
+                        times: {},
+                        athlete: athlete
+                    });
+                }
             });
             
             // Group rows by distance dynamically

@@ -1325,11 +1325,30 @@
                         window.firebaseGet(rootRef).then((rootSnapshot) => {
                             if (rootSnapshot.exists()) {
                                 const rootData = rootSnapshot.val();
-                                console.log('Root level data:', Object.keys(rootData || {}));
+                                console.log('Root level data keys:', Object.keys(rootData || {}));
+                                
+                                // Check if event_name is in root
                                 if (rootData && rootData.event_name) {
                                     console.log('Found event_name in root data:', rootData.event_name);
                                     updateRaceName(String(rootData.event_name).trim());
+                                    return;
                                 }
+                                
+                                // Check if event_name is in NO_NAME
+                                if (rootData && rootData.NO_NAME && rootData.NO_NAME.event_name) {
+                                    console.log('Found event_name in NO_NAME:', rootData.NO_NAME.event_name);
+                                    updateRaceName(String(rootData.NO_NAME.event_name).trim());
+                                    return;
+                                }
+                                
+                                // Try RACE_CONFIG path
+                                if (rootData && rootData.RACE_CONFIG && rootData.RACE_CONFIG.event_name) {
+                                    console.log('Found event_name in RACE_CONFIG:', rootData.RACE_CONFIG.event_name);
+                                    updateRaceName(String(rootData.RACE_CONFIG.event_name).trim());
+                                    return;
+                                }
+                                
+                                console.log('event_name not found in root, NO_NAME, or RACE_CONFIG');
                             }
                         });
                     }
@@ -1392,14 +1411,22 @@
                             if (snapshot.exists()) {
                                 const firebaseData = snapshot.val();
                                 
-                                // Also try to get race name from NO_NAME if Event/RaceName exists
+                                // Try to get race name from NO_NAME
                                 if (firebaseData) {
-                                    const raceName = firebaseData.Event || firebaseData.RaceName || firebaseData.EventName ||
-                                                   firebaseData.event || firebaseData.raceName || firebaseData.eventName;
-                                    if (raceName) {
-                                        const nameStr = typeof raceName === 'string' ? raceName : (raceName.name || raceName.title || JSON.stringify(raceName));
-                                        if (nameStr && nameStr.trim()) {
-                                            updateRaceName(nameStr.trim());
+                                    // First try event_name in NO_NAME
+                                    if (firebaseData.event_name) {
+                                        console.log('Found event_name in NO_NAME:', firebaseData.event_name);
+                                        updateRaceName(String(firebaseData.event_name).trim());
+                                    }
+                                    // Fallback to other possible fields
+                                    else {
+                                        const raceName = firebaseData.Event || firebaseData.RaceName || firebaseData.EventName ||
+                                                       firebaseData.event || firebaseData.raceName || firebaseData.eventName;
+                                        if (raceName) {
+                                            const nameStr = typeof raceName === 'string' ? raceName : (raceName.name || raceName.title || JSON.stringify(raceName));
+                                            if (nameStr && nameStr.trim()) {
+                                                updateRaceName(nameStr.trim());
+                                            }
                                         }
                                     }
                                 }

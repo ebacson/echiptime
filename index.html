@@ -1123,6 +1123,8 @@
             const eventData = firebaseData[eventKey];
             const athletes = eventData.Athletes || {};
             
+            console.log('convertFirebaseDataToArray - Athletes count:', Object.keys(athletes).length);
+            
             // Define all possible checkpoints
             const allCheckpoints = ['START', 'CP1', 'CP2', 'CP3', 'FINISH'];
             const checkpointData = {};
@@ -1145,6 +1147,7 @@
             
             // Check if there are any checkpoint data
             const hasCheckpointData = availableCheckpoints.length > 0;
+            console.log('convertFirebaseDataToArray - hasCheckpointData:', hasCheckpointData, 'availableCheckpoints:', availableCheckpoints);
             
             // Create header row based on whether we have checkpoint data
             // If no checkpoint data: show only athlete list (BIB, Name, Gen, Distance)
@@ -1214,6 +1217,8 @@
                 }
             });
             
+            console.log('convertFirebaseDataToArray - Total rows created:', rows.length);
+            
             // Group rows by distance dynamically
             const distanceGroups = {};
             
@@ -1233,8 +1238,11 @@
                 distanceGroups[distanceKey].metadata.push(rowsMetadata[index]);
             });
             
+            console.log('convertFirebaseDataToArray - Distance groups:', Object.keys(distanceGroups));
+            
             // If no rows at all, but we have athletes, create a default group
             if (rows.length === 0 && Object.keys(athletes).length > 0) {
+                console.log('convertFirebaseDataToArray - No rows but has athletes, creating default group');
                 // Create rows from all athletes even if they don't have distance
                 Object.keys(athletes).forEach(tagId => {
                     const athlete = athletes[tagId];
@@ -1272,6 +1280,11 @@
                     checkpoints: availableCheckpoints,
                     distance: distanceKey
                 };
+            });
+            
+            console.log('convertFirebaseDataToArray - Final result keys:', Object.keys(result));
+            Object.keys(result).forEach(key => {
+                console.log(`convertFirebaseDataToArray - ${key}: ${result[key].data.length} rows (including header)`);
             });
             
             return result;
@@ -1417,12 +1430,17 @@
                         
                         const convertedData = convertFirebaseDataToArray({ [eventName]: firebaseData });
                         
+                        console.log('loadDataFromFirebase - convertedData:', convertedData);
+                        console.log('loadDataFromFirebase - convertedData keys:', convertedData ? Object.keys(convertedData) : 'null');
+                        
                         if (!convertedData || Object.keys(convertedData).length === 0) {
+                            console.error('loadDataFromFirebase - No converted data or empty keys');
                             throw new Error('Dữ liệu không hợp lệ');
                         }
                         
                         // Get current event_name to determine mode
                         const isEkiden = eventName.includes('EKIDEN') || eventName.includes('Ekiden');
+                        console.log('loadDataFromFirebase - isEkiden:', isEkiden);
                         
                         if (isEkiden) {
                             // EKIDEN mode: TEAM and Cá Nhân

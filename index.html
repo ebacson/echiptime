@@ -1183,16 +1183,20 @@
 
         // Function to convert Firebase data to array format (Excel-like)
         function convertFirebaseDataToArray(firebaseData) {
-            if (!firebaseData || !firebaseData.NO_NAME) return null;
+            if (!firebaseData) return null;
             
-            const noName = firebaseData.NO_NAME;
-            const athletes = noName.Athletes || {};
+            // Get the event data - it could be under any key (event_name)
+            const eventKey = Object.keys(firebaseData)[0];
+            if (!eventKey) return null;
+            
+            const eventData = firebaseData[eventKey];
+            const athletes = eventData.Athletes || {};
             
             // Define all possible checkpoints
             const allCheckpoints = ['START', 'CP1', 'CP2', 'CP3', 'FINISH'];
             const checkpointData = {};
             allCheckpoints.forEach(cp => {
-                checkpointData[cp] = noName[cp] || {};
+                checkpointData[cp] = eventData[cp] || {};
             });
             
             // Find which checkpoints have data
@@ -1251,17 +1255,23 @@
                 });
             });
             
-            // Filter rows by distance if needed
+            // Filter rows by distance - check multiple possible formats
             const race14Rows = [];
             const race14Metadata = [];
             const race3Rows = [];
             const race3Metadata = [];
             
             rows.forEach((row, index) => {
-                if (row[3] === '14.4KM') {
+                const distance = String(row[3] || '').trim().toUpperCase();
+                // Check for 14.4KM in various formats
+                if (distance === '14.4KM' || distance === '14.4' || distance === '14,4KM' || 
+                    distance.includes('14.4') || distance.includes('14,4')) {
                     race14Rows.push(row);
                     race14Metadata.push(rowsMetadata[index]);
-                } else if (row[3] === '3.6KM') {
+                } 
+                // Check for 3.6KM in various formats
+                else if (distance === '3.6KM' || distance === '3.6' || distance === '3,6KM' || 
+                         distance.includes('3.6') || distance.includes('3,6')) {
                     race3Rows.push(row);
                     race3Metadata.push(rowsMetadata[index]);
                 }

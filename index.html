@@ -1125,6 +1125,19 @@
             
             console.log('convertFirebaseDataToArray - Athletes count:', Object.keys(athletes).length);
             
+            // First, collect all unique distances from athletes to know how many distances we have
+            const uniqueDistances = new Set();
+            Object.keys(athletes).forEach(tagId => {
+                const athlete = athletes[tagId];
+                if (athlete && athlete.distance) {
+                    const distance = String(athlete.distance).trim();
+                    if (distance) {
+                        uniqueDistances.add(distance);
+                    }
+                }
+            });
+            console.log('convertFirebaseDataToArray - Unique distances found:', Array.from(uniqueDistances));
+            
             // Define all possible checkpoints
             const allCheckpoints = ['START', 'CP1', 'CP2', 'CP3', 'FINISH'];
             const checkpointData = {};
@@ -1148,6 +1161,12 @@
             // Check if there are any checkpoint data
             const hasCheckpointData = availableCheckpoints.length > 0;
             console.log('convertFirebaseDataToArray - hasCheckpointData:', hasCheckpointData, 'availableCheckpoints:', availableCheckpoints);
+            
+            // If no athletes found, return empty result
+            if (Object.keys(athletes).length === 0) {
+                console.log('convertFirebaseDataToArray - No athletes found');
+                return {};
+            }
             
             // Create header row based on whether we have checkpoint data
             // If no checkpoint data: show only athlete list (BIB, Name, Gen, Distance)
@@ -1238,15 +1257,30 @@
                 distanceGroups[distanceKey].metadata.push(rowsMetadata[index]);
             });
             
-            console.log('convertFirebaseDataToArray - Distance groups:', Object.keys(distanceGroups));
+            console.log('convertFirebaseDataToArray - Distance groups after grouping:', Object.keys(distanceGroups));
             
-            // If no rows at all, but we have athletes, create a default group
+            // Ensure all unique distances have a group (even if no rows yet)
+            // This is important to show tabs for all distances found in Athletes
+            uniqueDistances.forEach(distance => {
+                if (!distanceGroups[distance]) {
+                    console.log(`convertFirebaseDataToArray - Creating empty group for distance: ${distance}`);
+                    distanceGroups[distance] = {
+                        rows: [],
+                        metadata: []
+                    };
+                }
+            });
+            
+            // If no rows at all, but we have athletes, create rows for all athletes
             if (rows.length === 0 && Object.keys(athletes).length > 0) {
-                console.log('convertFirebaseDataToArray - No rows but has athletes, creating default group');
-                // Create rows from all athletes even if they don't have distance
+                console.log('convertFirebaseDataToArray - No rows but has athletes, creating rows for all athletes');
+                // Create rows from all athletes
                 Object.keys(athletes).forEach(tagId => {
                     const athlete = athletes[tagId];
                     if (!athlete) return;
+                    
+                    const distance = String(athlete.distance || '').trim();
+                    const distanceKey = distance || 'All';
                     
                     const row = [
                         athlete.bib || '',
@@ -1255,15 +1289,15 @@
                         athlete.distance || ''
                     ];
                     
-                    if (!distanceGroups['All']) {
-                        distanceGroups['All'] = {
+                    if (!distanceGroups[distanceKey]) {
+                        distanceGroups[distanceKey] = {
                             rows: [],
                             metadata: []
                         };
                     }
                     
-                    distanceGroups['All'].rows.push(row);
-                    distanceGroups['All'].metadata.push({
+                    distanceGroups[distanceKey].rows.push(row);
+                    distanceGroups[distanceKey].metadata.push({
                         tagId: tagId,
                         times: {},
                         athlete: athlete

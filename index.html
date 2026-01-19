@@ -1290,6 +1290,83 @@
             return result;
         }
 
+        // Function to create distance tabs dynamically
+        function createDistanceTabs(distances) {
+            const mainTabs = document.getElementById('main-tabs');
+            const distanceContainer = document.getElementById('distance-tabs-container');
+            if (!mainTabs || !distanceContainer) {
+                console.error('createDistanceTabs - mainTabs or distanceContainer not found');
+                return;
+            }
+            
+            console.log('createDistanceTabs - Creating tabs for distances:', distances);
+            
+            // Clear existing distance tabs
+            distanceContainer.innerHTML = '';
+            
+            // Create tab buttons
+            let tabButtonsHTML = '';
+            distances.forEach((distance, index) => {
+                const tabId = `distance-${index}`;
+                const activeClass = index === 0 ? 'active' : '';
+                tabButtonsHTML += `<button class="tab-button ${activeClass}" onclick="showTab('${tabId}')">${distance}</button>`;
+            });
+            mainTabs.innerHTML = tabButtonsHTML;
+            
+            // Create tab content for each distance
+            distances.forEach((distance, index) => {
+                const tabId = `distance-${index}`;
+                const activeClass = index === 0 ? 'active' : '';
+                const displayStyle = index === 0 ? 'block' : 'none';
+                
+                const tabHTML = `
+                    <div id="${tabId}" class="tab-content" style="display: ${displayStyle};">
+                        <div class="sub-tabs">
+                            <button class="sub-tab-button active" onclick="showSubTab('overall-${index}')">Overall</button>
+                            <button class="sub-tab-button" onclick="showSubTab('female-${index}')">Female</button>
+                            <button class="sub-tab-button" onclick="showSubTab('male-${index}')">Male</button>
+                        </div>
+                        
+                        <div id="overall-${index}" class="sub-tab-content active">
+                            <div class="search-container">
+                                <input type="text" id="search-${index}-overall" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-${index}-overall', 'search-${index}-overall')">
+                            </div>
+                            <div class="table-container">
+                                <div id="loading-${index}-overall" class="loading">Đang tải dữ liệu...</div>
+                                <div id="error-${index}-overall" class="error" style="display: none;"></div>
+                                <div id="table-${index}-overall"></div>
+                            </div>
+                        </div>
+                        
+                        <div id="female-${index}" class="sub-tab-content">
+                            <div class="search-container">
+                                <input type="text" id="search-${index}-female" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-${index}-female', 'search-${index}-female')">
+                            </div>
+                            <div class="table-container">
+                                <div id="loading-${index}-female" class="loading">Đang tải dữ liệu...</div>
+                                <div id="error-${index}-female" class="error" style="display: none;"></div>
+                                <div id="table-${index}-female"></div>
+                            </div>
+                        </div>
+                        
+                        <div id="male-${index}" class="sub-tab-content">
+                            <div class="search-container">
+                                <input type="text" id="search-${index}-male" class="search-box" placeholder="Tìm kiếm theo Tên hoặc BIB..." onkeyup="filterTable('table-${index}-male', 'search-${index}-male')">
+                            </div>
+                            <div class="table-container">
+                                <div id="loading-${index}-male" class="loading">Đang tải dữ liệu...</div>
+                                <div id="error-${index}-male" class="error" style="display: none;"></div>
+                                <div id="table-${index}-male"></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                distanceContainer.innerHTML += tabHTML;
+            });
+            
+            console.log('createDistanceTabs - Tabs created successfully');
+        }
+
         // Function to setup tabs based on event_name
         function setupTabsBasedOnEventName(eventName) {
             const mainTabs = document.getElementById('main-tabs');

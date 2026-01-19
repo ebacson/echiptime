@@ -1292,13 +1292,44 @@
                         const rootKeys = Object.keys(rootData || {});
                         console.log('Root level nodes:', rootKeys);
                         
-                        // Find the first node that is not NO_NAME (or use the first string value)
-                        // Each node at root level is an event_name
-                        for (const key of rootKeys) {
-                            if (key === 'NO_NAME') {
-                                continue; // Skip NO_NAME node
+                        // If NO_NAME exists, use it as event_name
+                        if (rootData.NO_NAME !== null && rootData.NO_NAME !== undefined) {
+                            const noNameValue = rootData.NO_NAME;
+                            console.log('Found NO_NAME node:', noNameValue, 'Type:', typeof noNameValue);
+                            
+                            let nameStr = '';
+                            if (typeof noNameValue === 'string') {
+                                nameStr = noNameValue;
+                            } else if (typeof noNameValue === 'object' && noNameValue.event_name) {
+                                // If it's an object with event_name property
+                                nameStr = String(noNameValue.event_name);
+                            } else {
+                                // If NO_NAME is an object, use the node name itself or first property
+                                nameStr = 'NO_NAME';
                             }
                             
+                            if (nameStr && nameStr.trim().length > 0) {
+                                console.log('Using NO_NAME as event_name:', nameStr.trim());
+                                updateRaceName(nameStr.trim());
+                                
+                                // Set up real-time listener for NO_NAME node
+                                const noNameRef = window.firebaseRef(window.firebaseDatabase, 'NO_NAME');
+                                window.firebaseOnValue(noNameRef, (snap) => {
+                                    if (snap.exists()) {
+                                        const val = snap.val();
+                                        if (typeof val === 'string') {
+                                            updateRaceName(val.trim());
+                                        } else if (val && val.event_name) {
+                                            updateRaceName(String(val.event_name).trim());
+                                        }
+                                    }
+                                });
+                                return;
+                            }
+                        }
+                        
+                        // If NO_NAME doesn't exist or is invalid, try other nodes
+                        for (const key of rootKeys) {
                             const nodeValue = rootData[key];
                             console.log(`Checking node "${key}":`, nodeValue, 'Type:', typeof nodeValue);
                             
@@ -1307,7 +1338,6 @@
                                 if (typeof nodeValue === 'string') {
                                     nameStr = nodeValue;
                                 } else if (typeof nodeValue === 'object' && nodeValue.event_name) {
-                                    // If it's an object with event_name property
                                     nameStr = String(nodeValue.event_name);
                                 } else {
                                     nameStr = String(nodeValue);
@@ -1317,7 +1347,7 @@
                                     console.log(`Found event_name in node "${key}":`, nameStr.trim());
                                     updateRaceName(nameStr.trim());
                                     
-                                    // Also set up real-time listener for this node
+                                    // Set up real-time listener
                                     const nodeRef = window.firebaseRef(window.firebaseDatabase, key);
                                     window.firebaseOnValue(nodeRef, (snap) => {
                                         if (snap.exists()) {
@@ -1328,7 +1358,7 @@
                                             }
                                         }
                                     });
-                                    return; // Found, stop checking
+                                    return;
                                 }
                             }
                         }

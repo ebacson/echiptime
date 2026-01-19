@@ -1245,6 +1245,12 @@
         // Function to update race name in UI
         function updateRaceName(raceName) {
             if (raceName && typeof raceName === 'string' && raceName.trim()) {
+                // Skip if it's "NO NAME" or empty
+                if (raceName.trim().toUpperCase() === 'NO NAME' || raceName.trim() === '') {
+                    console.log('Race name is "NO NAME" or empty, keeping default');
+                    return;
+                }
+                
                 // Update page title
                 document.title = `Kết quả ${raceName}`;
                 
@@ -1252,8 +1258,12 @@
                 const titleElement = document.getElementById('race-title');
                 if (titleElement) {
                     titleElement.textContent = raceName;
+                    console.log('Race name updated in UI:', raceName);
+                } else {
+                    console.log('Race title element not found');
                 }
-                console.log('Race name updated:', raceName);
+            } else {
+                console.log('Invalid race name:', raceName);
             }
         }
 
@@ -1274,14 +1284,21 @@
                         const raceConfig = snapshot.val();
                         console.log('Found RACE_CONFIG:', raceConfig);
                         
-                        if (raceConfig && raceConfig.event_name) {
-                            const eventName = raceConfig.event_name;
+                        if (raceConfig) {
+                            // Try event_name first
+                            const eventName = raceConfig.event_name || raceConfig.EventName || raceConfig.eventName;
                             console.log('Found event_name:', eventName);
-                            if (eventName && typeof eventName === 'string' && eventName.trim()) {
-                                updateRaceName(eventName.trim());
-                                return;
+                            
+                            if (eventName) {
+                                const nameStr = typeof eventName === 'string' ? eventName : String(eventName);
+                                if (nameStr && nameStr.trim() && nameStr.trim().toUpperCase() !== 'NO NAME') {
+                                    updateRaceName(nameStr.trim());
+                                    return;
+                                }
                             }
                         }
+                    } else {
+                        console.log('RACE_CONFIG not found in Firebase');
                     }
                     
                     // Fallback: Try other possible paths
@@ -1345,8 +1362,10 @@
                 if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet) {
                     clearInterval(checkFirebase);
                     
-                    // Load race name first
-                    loadRaceName();
+                    // Load race name first (with a small delay to ensure Firebase is ready)
+                    setTimeout(() => {
+                        loadRaceName();
+                    }, 100);
                     
                     // Load all data from Firebase (NO_NAME path)
                     const dataRef = window.firebaseRef(window.firebaseDatabase, 'NO_NAME');

@@ -374,7 +374,7 @@
     <div class="container">
         <div class="header">
             <img src="EKIDENlogo.PNG" alt="EKIDEN Logo" class="header-logo">
-            <h1>QTR EKIDEN 2026</h1>
+            <h1 id="race-title">QTR EKIDEN 2026</h1>
         </div>
         
         <div class="tabs">
@@ -1198,6 +1198,54 @@
                 });
         }
 
+        // Function to load race name from Firebase
+        function loadRaceName() {
+            if (!window.firebaseDatabase || !window.firebaseRef || !window.firebaseGet) {
+                return;
+            }
+            
+            // Try to get race name from various possible paths
+            const possiblePaths = ['Event', 'RaceName', 'EventName', 'NO_NAME/Event', 'NO_NAME/RaceName'];
+            
+            const tryLoadRaceName = (pathIndex) => {
+                if (pathIndex >= possiblePaths.length) {
+                    return; // Use default name if not found
+                }
+                
+                const path = possiblePaths[pathIndex];
+                const nameRef = window.firebaseRef(window.firebaseDatabase, path);
+                
+                window.firebaseGet(nameRef)
+                    .then((snapshot) => {
+                        if (snapshot.exists()) {
+                            const raceName = snapshot.val();
+                            if (raceName && typeof raceName === 'string' && raceName.trim()) {
+                                // Update page title
+                                document.title = `Kết quả ${raceName}`;
+                                
+                                // Update header
+                                const titleElement = document.getElementById('race-title');
+                                if (titleElement) {
+                                    titleElement.textContent = raceName;
+                                }
+                            } else {
+                                // Try next path
+                                tryLoadRaceName(pathIndex + 1);
+                            }
+                        } else {
+                            // Try next path
+                            tryLoadRaceName(pathIndex + 1);
+                        }
+                    })
+                    .catch(() => {
+                        // Try next path on error
+                        tryLoadRaceName(pathIndex + 1);
+                    });
+            };
+            
+            tryLoadRaceName(0);
+        }
+
         // Load data from Firebase when page loads
         window.addEventListener('DOMContentLoaded', () => {
             // Wait for Firebase to initialize
@@ -1205,12 +1253,28 @@
                 if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet) {
                     clearInterval(checkFirebase);
                     
+                    // Load race name first
+                    loadRaceName();
+                    
                     // Load all data from Firebase (NO_NAME path)
                     const dataRef = window.firebaseRef(window.firebaseDatabase, 'NO_NAME');
                     window.firebaseGet(dataRef)
                         .then((snapshot) => {
                             if (snapshot.exists()) {
                                 const firebaseData = snapshot.val();
+                                
+                                // Also try to get race name from NO_NAME if Event/RaceName exists
+                                if (firebaseData.Event || firebaseData.RaceName || firebaseData.EventName) {
+                                    const raceName = firebaseData.Event || firebaseData.RaceName || firebaseData.EventName;
+                                    if (raceName && typeof raceName === 'string' && raceName.trim()) {
+                                        document.title = `Kết quả ${raceName}`;
+                                        const titleElement = document.getElementById('race-title');
+                                        if (titleElement) {
+                                            titleElement.textContent = raceName;
+                                        }
+                                    }
+                                }
+                                
                                 const convertedData = convertFirebaseDataToArray({ NO_NAME: firebaseData });
                                 
                                 if (convertedData && convertedData.race14 && convertedData.race3) {

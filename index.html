@@ -6,6 +6,35 @@
     <title>Kết quả QTR - Ekiden 2026</title>
     <link rel="icon" type="image/x-icon" href="echiptime.ico">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, get, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js";
+
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyAiCvMlAAC3q87a7MEFLl3XDv0pkdkK93o",
+            authDomain: "realtime-echiptime.firebaseapp.com",
+            databaseURL: "https://realtime-echiptime-default-rtdb.firebaseio.com",
+            projectId: "realtime-echiptime",
+            storageBucket: "realtime-echiptime.firebasestorage.app",
+            messagingSenderId: "69244922788",
+            appId: "1:69244922788:web:c0a97507e0addad6286f31",
+            measurementId: "G-ECTTVR1X75"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const database = getDatabase(app);
+
+        // Make Firebase functions available globally
+        window.firebaseDatabase = database;
+        window.firebaseRef = ref;
+        window.firebaseGet = get;
+        window.firebaseOnValue = onValue;
+    </script>
     <style>
         * {
             margin: 0;
@@ -889,61 +918,164 @@
             'table-14': null
         };
 
-        // Load both files when page loads
-        window.addEventListener('DOMContentLoaded', () => {
-            // Load 14.4KM file
-            fetch('Results_14.4KM.xlsx')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Không thể tải file: Results_14.4KM.xlsx');
-                    }
-                    return response.arrayBuffer();
-                })
-                .then(data => {
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    race14Data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-                    
-                    document.getElementById('loading-14').style.display = 'none';
-                    createTable(race14Data, 'table-14', 'Overall', race14Data);
-                })
-                .catch(error => {
-                    document.getElementById('loading-14').style.display = 'none';
-                    document.getElementById('error-14').style.display = 'block';
-                    document.getElementById('error-14').textContent = `Lỗi: ${error.message}`;
-                });
+        // Function to convert Firebase data to array format
+        function convertFirebaseDataToArray(firebaseData) {
+            if (!firebaseData) return null;
             
-            // Load 3.6KM file and create all three views
-            fetch('Results_3.6KM.xlsx')
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Không thể tải file: Results_3.6KM.xlsx');
-                    }
-                    return response.arrayBuffer();
-                })
-                .then(data => {
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const firstSheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[firstSheetName];
-                    race3Data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
-
-                    // Create all three views with original data for ranking calculation
-                    document.getElementById('loading-3-overall').style.display = 'none';
-                    document.getElementById('loading-3-female').style.display = 'none';
-                    document.getElementById('loading-3-male').style.display = 'none';
+            // If data is already an array, return it
+            if (Array.isArray(firebaseData)) {
+                return firebaseData;
+            }
+            
+            // If data is an object, convert to array
+            if (typeof firebaseData === 'object') {
+                // Check if it's an object with numeric keys (like Firebase array)
+                const keys = Object.keys(firebaseData);
+                const isArrayLike = keys.every(key => !isNaN(parseInt(key)));
+                
+                if (isArrayLike) {
+                    // Convert object with numeric keys to array
+                    return keys.map(key => firebaseData[key]).filter(item => item !== null);
+                } else {
+                    // Convert object to array of arrays (header + rows)
+                    const header = Object.keys(firebaseData);
+                    const rows = [];
                     
-                    createTable(race3Data, 'table-3-overall', 'Overall', race3Data);
-                    createTable(race3Data, 'table-3-female', 'Female', race3Data);
-                    createTable(race3Data, 'table-3-male', 'Male', race3Data);
+                    // Get all unique row indices
+                    const rowIndices = new Set();
+                    header.forEach(key => {
+                        if (firebaseData[key] && typeof firebaseData[key] === 'object') {
+                            Object.keys(firebaseData[key]).forEach(idx => rowIndices.add(idx));
+                        }
+                    });
+                    
+                    // Build rows
+                    Array.from(rowIndices).sort((a, b) => parseInt(a) - parseInt(b)).forEach(idx => {
+                        const row = header.map(key => {
+                            return firebaseData[key] && firebaseData[key][idx] !== undefined 
+                                ? firebaseData[key][idx] 
+                                : '';
+                        });
+                        rows.push(row);
+                    });
+                    
+                    return [header, ...rows];
+                }
+            }
+            
+            return null;
+        }
+
+        // Function to load data from Firebase
+        function loadDataFromFirebase(path, loadingId, errorId, tableId, genderFilter) {
+            const loadingDiv = document.getElementById(loadingId);
+            const errorDiv = document.getElementById(errorId);
+            
+            if (!window.firebaseDatabase || !window.firebaseRef || !window.firebaseGet) {
+                // Wait for Firebase to initialize
+                return new Promise((resolve) => {
+                    setTimeout(() => {
+                        loadDataFromFirebase(path, loadingId, errorId, tableId, genderFilter).then(resolve);
+                    }, 500);
+                });
+            }
+            
+            const dataRef = window.firebaseRef(window.firebaseDatabase, path);
+            
+            return window.firebaseGet(dataRef)
+                .then((snapshot) => {
+                    if (snapshot.exists()) {
+                        const firebaseData = snapshot.val();
+                        let jsonData = convertFirebaseDataToArray(firebaseData);
+                        
+                        if (!jsonData || jsonData.length === 0) {
+                            throw new Error('Dữ liệu trống');
+                        }
+                        
+                        loadingDiv.style.display = 'none';
+                        errorDiv.style.display = 'none';
+                        
+                        createTable(jsonData, tableId, genderFilter, jsonData);
+                        return jsonData;
+                    } else {
+                        throw new Error('Không tìm thấy dữ liệu');
+                    }
                 })
                 .catch(error => {
+                    loadingDiv.style.display = 'none';
+                    errorDiv.style.display = 'block';
+                    errorDiv.textContent = `Lỗi: ${error.message}`;
+                    console.error('Firebase error:', error);
+                    throw error;
+                });
+        }
+
+        // Load data from Firebase when page loads
+        window.addEventListener('DOMContentLoaded', () => {
+            // Wait for Firebase to initialize
+            const checkFirebase = setInterval(() => {
+                if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet) {
+                    clearInterval(checkFirebase);
+                    
+                    // Load 14.4KM data from Firebase (TEAM)
+                    loadDataFromFirebase('race14', 'loading-14', 'error-14', 'table-14', 'Overall')
+                        .then(data => {
+                            if (data) {
+                                race14Data = data;
+                            }
+                        });
+                    
+                    // Load 3.6KM data from Firebase (Cá Nhân)
+                    const race3Ref = window.firebaseRef(window.firebaseDatabase, 'race3');
+                    window.firebaseGet(race3Ref)
+                        .then((snapshot) => {
+                            if (snapshot.exists()) {
+                                const firebaseData = snapshot.val();
+                                race3Data = convertFirebaseDataToArray(firebaseData);
+                                
+                                if (race3Data && race3Data.length > 0) {
+                                    document.getElementById('loading-3-overall').style.display = 'none';
+                                    document.getElementById('loading-3-female').style.display = 'none';
+                                    document.getElementById('loading-3-male').style.display = 'none';
+                                    
+                                    createTable(race3Data, 'table-3-overall', 'Overall', race3Data);
+                                    createTable(race3Data, 'table-3-female', 'Female', race3Data);
+                                    createTable(race3Data, 'table-3-male', 'Male', race3Data);
+                                } else {
+                                    throw new Error('Dữ liệu trống');
+                                }
+                            } else {
+                                document.getElementById('loading-3-overall').style.display = 'none';
+                                document.getElementById('loading-3-female').style.display = 'none';
+                                document.getElementById('loading-3-male').style.display = 'none';
+                                document.getElementById('error-3-overall').style.display = 'block';
+                                document.getElementById('error-3-overall').textContent = 'Lỗi: Không tìm thấy dữ liệu';
+                            }
+                        })
+                        .catch(error => {
+                            document.getElementById('loading-3-overall').style.display = 'none';
+                            document.getElementById('loading-3-female').style.display = 'none';
+                            document.getElementById('loading-3-male').style.display = 'none';
+                            document.getElementById('error-3-overall').style.display = 'block';
+                            document.getElementById('error-3-overall').textContent = `Lỗi: ${error.message}`;
+                            console.error('Firebase error:', error);
+                        });
+                }
+            }, 100);
+            
+            // Timeout after 10 seconds
+            setTimeout(() => {
+                clearInterval(checkFirebase);
+                if (!window.firebaseDatabase) {
+                    console.error('Firebase initialization timeout');
+                    document.getElementById('loading-14').style.display = 'none';
                     document.getElementById('loading-3-overall').style.display = 'none';
                     document.getElementById('loading-3-female').style.display = 'none';
                     document.getElementById('loading-3-male').style.display = 'none';
-                    document.getElementById('error-3-overall').style.display = 'block';
-                    document.getElementById('error-3-overall').textContent = `Lỗi: ${error.message}`;
-                });
+                    document.getElementById('error-14').style.display = 'block';
+                    document.getElementById('error-14').textContent = 'Lỗi: Không thể kết nối Firebase';
+                }
+            }, 10000);
         });
     </script>
 </body>

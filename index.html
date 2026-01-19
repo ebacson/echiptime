@@ -1291,50 +1291,6 @@
             };
         }
 
-        // Function to load data from Firebase
-        function loadDataFromFirebase(path, loadingId, errorId, tableId, genderFilter) {
-            const loadingDiv = document.getElementById(loadingId);
-            const errorDiv = document.getElementById(errorId);
-            
-            if (!window.firebaseDatabase || !window.firebaseRef || !window.firebaseGet) {
-                // Wait for Firebase to initialize
-                return new Promise((resolve) => {
-                    setTimeout(() => {
-                        loadDataFromFirebase(path, loadingId, errorId, tableId, genderFilter).then(resolve);
-                    }, 500);
-                });
-            }
-            
-            const dataRef = window.firebaseRef(window.firebaseDatabase, path);
-            
-            return window.firebaseGet(dataRef)
-                .then((snapshot) => {
-                    if (snapshot.exists()) {
-                        const firebaseData = snapshot.val();
-                        let jsonData = convertFirebaseDataToArray(firebaseData);
-                        
-                        if (!jsonData || jsonData.length === 0) {
-                            throw new Error('Dữ liệu trống');
-                        }
-                        
-                        loadingDiv.style.display = 'none';
-                        errorDiv.style.display = 'none';
-                        
-                        createTable(jsonData, tableId, genderFilter, jsonData);
-                        return jsonData;
-                    } else {
-                        throw new Error('Không tìm thấy dữ liệu');
-                    }
-                })
-                .catch(error => {
-                    loadingDiv.style.display = 'none';
-                    errorDiv.style.display = 'block';
-                    errorDiv.textContent = `Lỗi: ${error.message}`;
-                    console.error('Firebase error:', error);
-                    throw error;
-                });
-        }
-
         // Function to setup tabs based on event_name
         function setupTabsBasedOnEventName(eventName) {
             const mainTabs = document.getElementById('main-tabs');

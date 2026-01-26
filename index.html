@@ -104,12 +104,24 @@
             display: block;
         }
 
+        .header-titles {
+            margin-bottom: 30px;
+        }
+
         h1 {
             text-align: center;
             color: white;
-            margin-bottom: 30px;
+            margin-bottom: 8px;
             font-size: 2.5em;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .race-start-time {
+            text-align: center;
+            color: rgba(255,255,255,0.95);
+            font-size: 1.1em;
+            margin: 0;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
         }
 
         .tabs {
@@ -378,7 +390,10 @@
     <div class="container">
         <div class="header">
             <img src="echiptime_logo.png" alt="Logo" class="header-logo">
-            <h1 id="race-title">Kết quả</h1>
+            <div class="header-titles">
+                <h1 id="race-title">Kết quả</h1>
+                <p id="race-start-time" class="race-start-time"></p>
+            </div>
         </div>
         
         <div class="tabs" id="main-tabs">
@@ -1096,6 +1111,19 @@
             'table-14': null
         };
 
+        // Format RACE_CONFIG start_time for display: "2026-01-24 17:50:00:000" -> "24/01/2026 17:50"
+        function formatStartTimeDisplay(startTimeStr) {
+            if (!startTimeStr || typeof startTimeStr !== 'string') return '';
+            const s = startTimeStr.trim();
+            const parts = s.split(' ');
+            if (parts.length < 2) return s;
+            const [datePart, timePart] = parts;
+            const [y, m, d] = datePart.split('-');
+            const timeShort = timePart.split(':').slice(0, 2).join(':'); // HH:mm
+            if (d && m && y) return `${d}/${m}/${y} ${timeShort}`;
+            return s;
+        }
+
         // Function to parse datetime string from Firebase
         function parseFirebaseDateTime(dateTimeStr) {
             // Format: "2026-01-19 17:25:05:551"
@@ -1604,6 +1632,15 @@
                 .then((snapshot) => {
                     if (snapshot.exists()) {
                         const firebaseData = snapshot.val();
+                        
+                        // Hiển thị start_time từ RACE_CONFIG dưới tên sự kiện
+                        const raceConfig = firebaseData.RACE_CONFIG || {};
+                        const startTimeStr = raceConfig.start_time;
+                        const startTimeEl = document.getElementById('race-start-time');
+                        if (startTimeEl) {
+                            startTimeEl.textContent = startTimeStr ? formatStartTimeDisplay(startTimeStr) : '';
+                            startTimeEl.style.display = startTimeStr ? 'block' : 'none';
+                        }
                         
                         const convertedData = convertFirebaseDataToArray({ [eventName]: firebaseData });
                         

@@ -1299,6 +1299,10 @@
                             times['START'] = raceStartTime;
                         }
                     }
+                    // Nếu VĐV có START sớm hơn start_time thì lấy bằng start_time
+                    if (times['START'] && raceStartTime && times['START'] < raceStartTime) {
+                        times['START'] = raceStartTime;
+                    }
                     
                     // Calculate Chip Time (FINISH - START)
                     const startTime = times['START'];

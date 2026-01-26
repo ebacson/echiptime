@@ -1269,6 +1269,11 @@
                 ? ['BIB', 'Name', 'Gen', 'Distance', ...availableCheckpoints, 'Chip Time']
                 : ['BIB', 'Name', 'Gen', 'Distance'];
             
+            // Parse RACE_CONFIG.start_time để dùng làm START khi VĐV có checkpoint khác nhưng không có START
+            const raceConfig = eventData.RACE_CONFIG || {};
+            const raceStartTimeStr = raceConfig.start_time;
+            const raceStartTime = raceStartTimeStr ? parseFirebaseDateTime(raceStartTimeStr) : null;
+            
             // Create data rows
             const rows = [];
             const rowsMetadata = []; // Store times for split calculation
@@ -1286,6 +1291,14 @@
                         const lines = checkpointData[cp][tagId]?.lines || {};
                         times[cp] = getEarliestTime(lines);
                     });
+                    
+                    // Nếu VĐV có checkpoint khác mà không có START thì lấy start_time làm START
+                    if (!times['START'] && raceStartTime) {
+                        const hasOtherCheckpoint = availableCheckpoints.some(cp => cp !== 'START' && times[cp]);
+                        if (hasOtherCheckpoint) {
+                            times['START'] = raceStartTime;
+                        }
+                    }
                     
                     // Calculate Chip Time (FINISH - START)
                     const startTime = times['START'];

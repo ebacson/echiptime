@@ -191,6 +191,24 @@
             border-color: white;
         }
 
+        .age-filter-wrap {
+            margin-bottom: 16px;
+            text-align: center;
+        }
+
+        .age-filter-label {
+            display: block;
+            color: rgba(255,255,255,0.95);
+            font-size: 0.95em;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+
+        .sub-tabs.age-sub-tabs {
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+
         .sub-tab-content {
             display: none;
         }
@@ -418,6 +436,7 @@
                 <button class="sub-tab-button" onclick="showSubTab('female-3')">Female</button>
                 <button class="sub-tab-button" onclick="showSubTab('male-3')">Male</button>
             </div>
+            <div id="race-3-age-anchor"></div>
             
             <div id="overall-3" class="sub-tab-content active">
                 <div class="search-container">
@@ -548,6 +567,117 @@
             return filteredData;
         }
 
+        function collectUniqueAgeGroups(metadata) {
+            const set = new Set();
+            if (!metadata || !Array.isArray(metadata)) return [];
+            metadata.forEach(item => {
+                const a = item && item.athlete && item.athlete.age != null
+                    ? String(item.athlete.age).trim() : '';
+                if (a) set.add(a);
+            });
+            return Array.from(set).sort((a, b) => a.localeCompare(b, 'vi'));
+        }
+
+        function filterDataByAgeGroup(data, ageFilter) {
+            if (!data || data.length === 0 || !ageFilter || ageFilter === 'All') {
+                return data;
+            }
+            let ageIndex = -1;
+            if (data[0]) {
+                data[0].forEach((cell, index) => {
+                    const cellStr = String(cell || '').trim().toLowerCase();
+                    if (cellStr === 'nhóm tuổi' || cellStr === 'age' || cellStr.includes('tuổi')) {
+                        ageIndex = index;
+                    }
+                });
+            }
+            if (ageIndex === -1) return data;
+            const filteredData = [data[0]];
+            const target = String(ageFilter).trim();
+            for (let i = 1; i < data.length; i++) {
+                const cellValue = String(data[i][ageIndex] || '').trim();
+                if (cellValue === target) filteredData.push(data[i]);
+            }
+            return filteredData;
+        }
+
+        window.ageGroupFilters = window.ageGroupFilters || {};
+        window.tableSources = window.tableSources || {};
+
+        function setAgeFilter(namespace, value) {
+            window.ageGroupFilters[namespace] = value === 'All' ? 'All' : String(value);
+        }
+
+        function getAgeFilter(namespace) {
+            const v = window.ageGroupFilters[namespace];
+            return v && v !== 'All' ? v : 'All';
+        }
+
+        function injectAgeGroupControls(containerEl, namespace, metadata) {
+            if (!containerEl) return;
+            const ages = collectUniqueAgeGroups(metadata);
+            containerEl.innerHTML = '';
+            if (ages.length === 0) return;
+            const wrap = document.createElement('div');
+            wrap.className = 'age-filter-wrap';
+            const label = document.createElement('span');
+            label.className = 'age-filter-label';
+            label.textContent = 'Nhóm tuổi';
+            const tabs = document.createElement('div');
+            tabs.className = 'sub-tabs age-sub-tabs';
+            const cur = getAgeFilter(namespace);
+            const mkBtn = (caption, ageVal, active) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.dataset.ageGroup = ageVal === 'All' ? 'All' : String(ageVal);
+                b.className = 'sub-tab-button' + (active ? ' active' : '');
+                b.textContent = caption;
+                b.onclick = () => selectAgeGroup(namespace, ageVal, tabs);
+                return b;
+            };
+            tabs.appendChild(mkBtn('Tất cả', 'All', cur === 'All'));
+            ages.forEach(ag => {
+                tabs.appendChild(mkBtn(ag, ag, cur === ag));
+            });
+            wrap.appendChild(label);
+            wrap.appendChild(tabs);
+            containerEl.appendChild(wrap);
+            setAgeFilter(namespace, cur === 'All' ? 'All' : cur);
+        }
+
+        function selectAgeGroup(namespace, ageVal, tabsEl) {
+            setAgeFilter(namespace, ageVal);
+            const key = ageVal === 'All' ? 'All' : String(ageVal);
+            if (tabsEl && tabsEl.querySelectorAll) {
+                tabsEl.querySelectorAll('.sub-tab-button').forEach(btn => {
+                    const v = btn.dataset.ageGroup || 'All';
+                    btn.classList.toggle('active', v === key);
+                });
+            }
+            if (namespace === 'ekiden3') refreshEkidenRace3Tables();
+            else if (namespace.startsWith('dist-')) refreshDistanceTables(namespace.replace('dist-', ''));
+        }
+
+        function refreshEkidenRace3Tables() {
+            const src = window.tableSources.ekiden3;
+            if (!src || !src.data) return;
+            const age = getAgeFilter('ekiden3');
+            createTable(src.data, 'table-3-overall', 'Overall', src.data, src.metadata, src.checkpoints, age);
+            createTable(src.data, 'table-3-female', 'Female', src.data, src.metadata, src.checkpoints, age);
+            createTable(src.data, 'table-3-male', 'Male', src.data, src.metadata, src.checkpoints, age);
+        }
+
+        function refreshDistanceTables(indexStr) {
+            const idx = parseInt(indexStr, 10);
+            const ns = 'dist-' + idx;
+            const src = window.tableSources[ns];
+            if (!src || !src.data) return;
+            const age = getAgeFilter(ns);
+            createTable(src.data, `table-${idx}-overall`, 'Overall', src.data, src.metadata, src.checkpoints, age);
+            createTable(src.data, `table-${idx}-female`, 'Female', src.data, src.metadata, src.checkpoints, age);
+            createTable(src.data, `table-${idx}-male`, 'Male', src.data, src.metadata, src.checkpoints, age);
+        }
+
         function calculateRankings(originalData, chiptimeIndex, genderIndex) {
             if (!originalData || originalData.length < 2 || chiptimeIndex < 0) {
                 return { overall: {}, byGender: { female: {}, male: {} } };
@@ -629,23 +759,31 @@
         // Store metadata for split time calculation
         const tableMetadata = {};
 
-        function createTable(data, tableId, genderFilter = 'Overall', originalData = null, metadata = null, checkpoints = null) {
+        function createTable(data, tableId, genderFilter = 'Overall', originalData = null, metadata = null, checkpoints = null, ageGroupFilter = 'All') {
             // Use original data if provided, otherwise use filtered data
             const dataForRanking = originalData || data;
             
             // Filter data by gender if needed
             let filteredData = filterDataByGender(data, genderFilter);
+            filteredData = filterDataByAgeGroup(filteredData, ageGroupFilter);
             
             // Filter metadata by gender if needed
             let filteredMetadata = metadata;
             if (metadata && genderFilter !== 'Overall') {
-                filteredMetadata = metadata.filter(item => {
+                filteredMetadata = filteredMetadata.filter(item => {
                     if (!item || !item.athlete) return false;
                     const gender = String(item.athlete.gen || '').trim().toLowerCase();
                     const targetGender = genderFilter.toLowerCase();
                     return gender === targetGender || 
                            (targetGender === 'female' && (gender === 'f' || gender === 'nữ')) ||
                            (targetGender === 'male' && (gender === 'm' || gender === 'nam'));
+                });
+            }
+            if (filteredMetadata && ageGroupFilter && ageGroupFilter !== 'All') {
+                filteredMetadata = filteredMetadata.filter(item => {
+                    if (!item || !item.athlete) return false;
+                    const age = String(item.athlete.age || '').trim();
+                    return age === String(ageGroupFilter).trim();
                 });
             }
             
@@ -666,7 +804,8 @@
             const columnsToHide = ['Age', 'age', 'AGE', 'TagID', 'tagid', 'TAGID', 'Tag Id', 'tag id', 'TAG ID'];
             
             // Columns to show in main view
-            const columnsToShow = ['BIB', 'Bib', 'bib', 'Name', 'name', 'NAME', 'Gen', 'gen', 'GEN', 'Gender', 'gender', 
+            const columnsToShow = ['BIB', 'Bib', 'bib', 'Name', 'name', 'NAME', 'Gen', 'gen', 'GEN', 'Gender', 'gender',
+                                   'Nhóm tuổi', 'nhóm tuổi', 'NHÓM TUỔI',
                                    'Distance', 'distance', 'DISTANCE', 'START', 'Start', 'start', 
                                    'CP1', 'cp1', 'CP2', 'cp2', 'CP3', 'cp3', 
                                    'FINISH', 'Finish', 'finish', 
@@ -1263,11 +1402,11 @@
             }
             
             // Create header row based on whether we have checkpoint data
-            // If no checkpoint data: show only athlete list (BIB, Name, Gen, Distance)
-            // If has checkpoint data: show full results (BIB, Name, Gen, Distance, Checkpoints, Chip Time)
+            // If no checkpoint data: show only athlete list (BIB, Name, Gen, Nhóm tuổi, Distance)
+            // If has checkpoint data: full results (..., Nhóm tuổi, Distance, Checkpoints, Chip Time)
             const header = hasCheckpointData 
-                ? ['BIB', 'Name', 'Gen', 'Distance', ...availableCheckpoints, 'Chip Time']
-                : ['BIB', 'Name', 'Gen', 'Distance'];
+                ? ['BIB', 'Name', 'Gen', 'Nhóm tuổi', 'Distance', ...availableCheckpoints, 'Chip Time']
+                : ['BIB', 'Name', 'Gen', 'Nhóm tuổi', 'Distance'];
             
             // Parse RACE_CONFIG.start_time để dùng làm START khi VĐV có checkpoint khác nhưng không có START
             const raceConfig = eventData.RACE_CONFIG || {};
@@ -1309,11 +1448,13 @@
                     const finishTime = times['FINISH'];
                     const chipTime = calculateTimeDifference(startTime, finishTime);
                     
+                    const ageGroupVal = athlete.age != null ? String(athlete.age).trim() : '';
                     // Create row with checkpoint data and chip time
                     const row = [
                         athlete.bib || '',
                         athlete.name || '',
                         athlete.gen || '',
+                        ageGroupVal,
                         athlete.distance || '',
                         ...availableCheckpoints.map(cp => times[cp] ? formatTime(times[cp]) : ''),
                         chipTime
@@ -1329,10 +1470,12 @@
                     });
                 } else {
                     // NO CHECKPOINT DATA: Show only athlete list from Athletes node
+                    const ageGroupVal = athlete.age != null ? String(athlete.age).trim() : '';
                     const row = [
                         athlete.bib || '',
                         athlete.name || '',
                         athlete.gen || '',
+                        ageGroupVal,
                         athlete.distance || ''
                     ];
                     
@@ -1353,7 +1496,7 @@
             const distanceGroups = {};
             
             rows.forEach((row, index) => {
-                const distance = String(row[3] || '').trim();
+                const distance = String(row[4] || '').trim();
                 // If no distance, use "All" as default to ensure athletes are still displayed
                 const distanceKey = distance || 'All';
                 
@@ -1393,10 +1536,12 @@
                     const distance = String(athlete.distance || '').trim();
                     const distanceKey = distance || 'All';
                     
+                    const ageGroupVal = athlete.age != null ? String(athlete.age).trim() : '';
                     const row = [
                         athlete.bib || '',
                         athlete.name || '',
                         athlete.gen || '',
+                        ageGroupVal,
                         athlete.distance || ''
                     ];
                     
@@ -1471,6 +1616,7 @@
                             <button class="sub-tab-button" onclick="showSubTab('female-${index}')">Female</button>
                             <button class="sub-tab-button" onclick="showSubTab('male-${index}')">Male</button>
                         </div>
+                        <div id="distance-${index}-age-anchor"></div>
                         
                         <div id="overall-${index}" class="sub-tab-content active">
                             <div class="search-container">
@@ -1669,6 +1815,9 @@
                             throw new Error('Dữ liệu không hợp lệ');
                         }
                         
+                        window.ageGroupFilters = {};
+                        window.tableSources = {};
+                        
                         // Get current event_name to determine mode
                         const isEkiden = eventName.includes('EKIDEN') || eventName.includes('Ekiden');
                         console.log('loadDataFromFirebase - isEkiden:', isEkiden);
@@ -1703,12 +1852,20 @@
                                 if (loading3Female) loading3Female.style.display = 'none';
                                 if (loading3Male) loading3Male.style.display = 'none';
                                 
+                                window.tableSources.ekiden3 = {
+                                    data: race3Data.data,
+                                    metadata: race3Data.metadata,
+                                    checkpoints: race3Data.checkpoints
+                                };
+                                window.ageGroupFilters.ekiden3 = 'All';
+                                injectAgeGroupControls(document.getElementById('race-3-age-anchor'), 'ekiden3', race3Data.metadata);
+                                
                                 createTable(race3Data.data, 'table-3-overall', 'Overall', race3Data.data,
-                                           race3Data.metadata, race3Data.checkpoints);
+                                           race3Data.metadata, race3Data.checkpoints, 'All');
                                 createTable(race3Data.data, 'table-3-female', 'Female', race3Data.data,
-                                           race3Data.metadata, race3Data.checkpoints);
+                                           race3Data.metadata, race3Data.checkpoints, 'All');
                                 createTable(race3Data.data, 'table-3-male', 'Male', race3Data.data,
-                                           race3Data.metadata, race3Data.checkpoints);
+                                           race3Data.metadata, race3Data.checkpoints, 'All');
                             }
                         } else {
                             // Distance mode: create tabs dynamically based on distances found
@@ -1725,6 +1882,15 @@
                                 const distanceData = convertedData[distance];
                                 if (!distanceData) return;
                                 
+                                const ns = 'dist-' + index;
+                                window.tableSources[ns] = {
+                                    data: distanceData.data,
+                                    metadata: distanceData.metadata,
+                                    checkpoints: distanceData.checkpoints
+                                };
+                                window.ageGroupFilters[ns] = 'All';
+                                injectAgeGroupControls(document.getElementById(`distance-${index}-age-anchor`), ns, distanceData.metadata);
+                                
                                 // Hide loading indicators
                                 const loadingOverall = document.getElementById(`loading-${index}-overall`);
                                 const loadingFemale = document.getElementById(`loading-${index}-female`);
@@ -1735,11 +1901,11 @@
                                 
                                 // Create tables for each gender
                                 createTable(distanceData.data, `table-${index}-overall`, 'Overall', distanceData.data,
-                                           distanceData.metadata, distanceData.checkpoints);
+                                           distanceData.metadata, distanceData.checkpoints, 'All');
                                 createTable(distanceData.data, `table-${index}-female`, 'Female', distanceData.data,
-                                           distanceData.metadata, distanceData.checkpoints);
+                                           distanceData.metadata, distanceData.checkpoints, 'All');
                                 createTable(distanceData.data, `table-${index}-male`, 'Male', distanceData.data,
-                                           distanceData.metadata, distanceData.checkpoints);
+                                           distanceData.metadata, distanceData.checkpoints, 'All');
                             });
                         }
                     } else {

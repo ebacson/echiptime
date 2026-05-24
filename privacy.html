@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chính sách quyền riêng tư - eChipTime</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            line-height: 1.65;
+            color: #1a1a1a;
+            background: #f8f9fa;
+            padding: 24px 16px 48px;
+        }
+        .container {
+            max-width: 760px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 12px;
+            padding: 32px 28px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        }
+        h1 { font-size: 1.75rem; margin-bottom: 8px; color: #2c3e50; }
+        h2 { font-size: 1.15rem; margin: 28px 0 10px; color: #34495e; }
+        p, li { margin-bottom: 10px; font-size: 0.98rem; }
+        ul { padding-left: 22px; margin-bottom: 12px; }
+        .meta { color: #666; font-size: 0.9rem; margin-bottom: 24px; }
+        .note {
+            background: #fff8e6;
+            border-left: 4px solid #f39c12;
+            padding: 12px 14px;
+            margin: 16px 0;
+            font-size: 0.92rem;
+        }
+        a { color: #2980b9; }
+        footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid #eee; color: #666; font-size: 0.88rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Chính sách quyền riêng tư</h1>
+        <p class="meta"><strong>Ứng dụng:</strong> eChipTime (ChipTime)<br>
+        <strong>Có hiệu lực:</strong> 24 tháng 5, 2026<br>
+        <strong>Phiên bản:</strong> 1.0</p>
+
+        <p>Chính sách này mô tả cách chúng tôi thu thập, sử dụng, lưu trữ và bảo vệ thông tin khi bạn sử dụng ứng dụng di động <strong>eChipTime</strong> (“Ứng dụng”) — phần mềm hỗ trợ ghi nhận thời gian thi đấu (chip timing) cho các sự kiện thể thao.</p>
+
+        <p>Bằng việc sử dụng Ứng dụng, bạn đồng ý với các điều khoản trong Chính sách quyền riêng tư này. Nếu bạn không đồng ý, vui lòng không sử dụng Ứng dụng.</p>
+
+        <h2>1. Chủ sở hữu và liên hệ</h2>
+        <p><strong>Đơn vị vận hành:</strong> [Điền tên công ty / tổ chức của bạn]<br>
+        <strong>Email liên hệ:</strong> <a href="mailto:[email@example.com]">[email@example.com]</a><br>
+        <strong>Địa chỉ:</strong> [Điền địa chỉ, nếu có]</p>
+        <p>Mọi câu hỏi về quyền riêng tư, vui lòng liên hệ qua email trên. Chúng tôi sẽ phản hồi trong thời gian hợp lý.</p>
+
+        <h2>2. Phạm vi áp dụng</h2>
+        <p>Chính sách này áp dụng cho:</p>
+        <ul>
+            <li>Ứng dụng eChipTime trên iOS và Android</li>
+            <li>Dịch vụ đồng bộ dữ liệu qua Firebase (xác thực tài khoản và cơ sở dữ liệu thời gian thực)</li>
+            <li>Các trang web kết quả liên quan do chúng tôi vận hành (nếu có)</li>
+        </ul>
+
+        <h2>3. Đối tượng sử dụng</h2>
+        <p>Ứng dụng dành cho <strong>ban tổ chức giải chạy (BTC)</strong> và nhân sự được ủy quyền. Ứng dụng <strong>không hỗ trợ đăng ký tài khoản công khai</strong>; tài khoản chỉ được cấp bởi quản trị viên.</p>
+        <p>Ứng dụng không hướng tới trẻ em dưới 13 tuổi và chúng tôi không cố ý thu thập thông tin cá nhân từ trẻ em.</p>
+
+        <h2>4. Thông tin chúng tôi thu thập</h2>
+
+        <h2>4.1. Thông tin tài khoản (BTC / nhân viên vận hành)</h2>
+        <ul>
+            <li><strong>Email</strong> và <strong>mật khẩu</strong> để đăng nhập (xác thực qua Firebase Authentication)</li>
+            <li>Mật khẩu được Firebase mã hóa và xử lý; chúng tôi không lưu mật khẩu dạng văn bản thuần trên thiết bị hoặc máy chủ của mình</li>
+        </ul>
+
+        <h2>4.2. Thông tin vận động viên và sự kiện</h2>
+        <p>Khi BTC sử dụng Ứng dụng để quản lý giải, các dữ liệu sau có thể được nhập hoặc đồng bộ:</p>
+        <ul>
+            <li>Số BIB, tên vận động viên, giới tính, nhóm tuổi, cự ly, mã thẻ RFID (TagID)</li>
+            <li>Tên đội (nếu có), email, số điện thoại, mã cá nhân (nếu BTC nhập vào danh sách)</li>
+            <li>Tên sự kiện, thời gian xuất phát, cấu hình checkpoint</li>
+            <li>Thời gian qua các điểm (START, CP, FINISH) và kết quả thi đấu (chip time)</li>
+        </ul>
+        <p>Dữ liệu vận động viên do BTC cung cấp. BTC chịu trách nhiệm có cơ sở pháp lý để thu thập và xử lý thông tin vận động viên theo quy định pháp luật Việt Nam.</p>
+
+        <h2>4.3. Dữ liệu kỹ thuật và thiết bị</h2>
+        <ul>
+            <li>Thông tin kết nối mạng (Wi‑Fi / Internet) để đồng bộ dữ liệu</li>
+            <li>Địa chỉ IP và dữ liệu nhật ký kỹ thuật do Firebase hoặc nhà cung cấp hạ tầng tạo ra</li>
+            <li>File cấu hình và dữ liệu checkpoint lưu cục bộ trên thiết bị (ví dụ: <code>race.ini</code>, file kết quả trong thư mục Documents/Chiptime)</li>
+            <li>Trên Android: quyền truy cập vị trí (location) có thể được yêu cầu cho một số chức năng liên quan thiết bị/mạng; Ứng dụng không dùng vị trí để theo dõi hành trình cá nhân liên tục</li>
+        </ul>
+
+        <h2>4.4. Thông tin chúng tôi không thu thập trực tiếp</h2>
+        <ul>
+            <li>Chúng tôi không bán dữ liệu cá nhân cho bên thứ ba</li>
+            <li>Chúng tôi không sử dụng dữ liệu cho quảng cáo cá nhân hóa</li>
+            <li>Ứng dụng không yêu cầu quyền truy cập danh bạ, ảnh thư viện hoặc microphone cho mục đích cốt lõi</li>
+        </ul>
+
+        <h2>5. Mục đích sử dụng thông tin</h2>
+        <p>Chúng tôi sử dụng thông tin để:</p>
+        <ul>
+            <li>Xác thực và quản lý quyền truy cập của BTC / nhân viên vận hành</li>
+            <li>Ghi nhận, lưu trữ và đồng bộ thời gian thi đấu qua các checkpoint</li>
+            <li>Quản lý danh sách vận động viên và hiển thị kết quả giải</li>
+            <li>Vận hành, bảo trì, khắc phục sự cố và cải thiện Ứng dụng</li>
+            <li>Đáp ứng yêu cầu pháp lý (nếu có)</li>
+        </ul>
+
+        <h2>6. Chia sẻ thông tin với bên thứ ba</h2>
+        <p>Chúng tôi có thể chia sẻ dữ liệu với các bên sau, chỉ trong phạm vi cần thiết để vận hành dịch vụ:</p>
+        <ul>
+            <li><strong>Google Firebase</strong> (Firebase Authentication, Firebase Realtime Database) — lưu trữ và đồng bộ dữ liệu. Xem thêm: <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener">Chính sách quyền riêng tư của Google Firebase</a></li>
+            <li><strong>Apple App Store / Google Play</strong> — xử lý phân phối ứng dụng và thanh toán (nếu có giao dịch trong tương lai)</li>
+            <li><strong>Cơ quan nhà nước</strong> — khi luật pháp yêu cầu</li>
+        </ul>
+        <p>Kết quả giải có thể được BTC công bố công khai (ví dụ: trang web kết quả, bảng xếp hạng tại sự kiện). BTC chịu trách nhiệm thông báo cho vận động viên về việc công bố kết quả.</p>
+
+        <h2>7. Lưu trữ và bảo mật</h2>
+        <ul>
+            <li>Dữ liệu đồng bộ được lưu trên Firebase do Google vận hành, với các biện pháp bảo mật tiêu chuẩn ngành</li>
+            <li>Dữ liệu cục bộ trên thiết bị do người dùng / BTC quản lý; BTC nên bảo vệ thiết bị bằng mật khẩu/khóa màn hình</li>
+            <li>Chúng tôi giữ dữ liệu trong thời gian cần thiết để vận hành giải và theo yêu cầu của BTC, trừ khi pháp luật yêu cầu lưu lâu hơn</li>
+        </ul>
+
+        <h2>8. Quyền của bạn</h2>
+        <p>Tùy theo luật áp dụng, bạn (hoặc vận động viên thông qua BTC) có thể có các quyền sau:</p>
+        <ul>
+            <li>Yêu cầu truy cập, chỉnh sửa hoặc xóa dữ liệu cá nhân</li>
+            <li>Yêu cầu hạn chế hoặc phản đối việc xử lý dữ liệu</li>
+            <li>Rút lại sự đồng ý (nếu việc xử lý dựa trên sự đồng ý)</li>
+            <li>Khiếu nại với cơ quan bảo vệ dữ liệu cá nhân có thẩm quyền</li>
+        </ul>
+        <p>Để thực hiện quyền này, vui lòng liên hệ email ở Mục 1. Vận động viên nên liên hệ BTC của giải để được hỗ trợ nhanh nhất.</p>
+
+        <h2>9. Đăng xuất và xóa tài khoản</h2>
+        <ul>
+            <li>BTC có thể đăng xuất khỏi Ứng dụng bất cứ lúc nào trong phần Cài đặt</li>
+            <li>Để xóa tài khoản đăng nhập hoặc yêu cầu xóa dữ liệu sự kiện, vui lòng liên hệ quản trị viên qua email ở Mục 1</li>
+        </ul>
+
+        <h2>10. Chuyển dữ liệu quốc tế</h2>
+        <p>Firebase (Google) có thể xử lý dữ liệu trên máy chủ đặt tại các quốc gia khác nhau. Bằng việc sử dụng Ứng dụng, bạn đồng ý với việc chuyển dữ liệu cần thiết cho mục đích vận hành dịch vụ, với các biện pháp bảo vệ phù hợp.</p>
+
+        <h2>11. Thay đổi chính sách</h2>
+        <p>Chúng tôi có thể cập nhật Chính sách này theo thời gian. Phiên bản mới sẽ được đăng tại URL này kèm ngày “Có hiệu lực”. Việc tiếp tục sử dụng Ứng dụng sau khi cập nhật đồng nghĩa với việc bạn chấp nhận các thay đổi.</p>
+
+        <h2>12. Luật áp dụng</h2>
+        <p>Chính sách này được giải thích theo pháp luật Việt Nam, bao gồm các quy định về bảo vệ dữ liệu cá nhân hiện hành, trừ khi pháp luật bắt buộc khác áp dụng.</p>
+
+        <div class="note">
+            <strong>Lưu ý cho BTC:</strong> Trước khi upload danh sách vận động viên, hãy đảm bảo đã thông báo và có sự đồng ý hợp lệ từ vận động viên theo quy định của giải và pháp luật.
+        </div>
+
+        <footer>
+            <p>&copy; 2026 [Tên công ty / tổ chức của bạn]. All rights reserved.</p>
+            <p><em>Privacy Policy — eChipTime (ChipTime)</em></p>
+        </footer>
+    </div>
+</body>
+</html>

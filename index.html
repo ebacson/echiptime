@@ -686,9 +686,10 @@
             const src = window.tableSources.ekiden3;
             if (!src || !src.data) return;
             const age = getAgeFilter('ekiden3');
-            createTable(src.data, 'table-3-overall', 'Overall', src.data, src.metadata, src.checkpoints, age);
-            createTable(src.data, 'table-3-female', 'Female', src.data, src.metadata, src.checkpoints, age);
-            createTable(src.data, 'table-3-male', 'Male', src.data, src.metadata, src.checkpoints, age);
+            const cpDist = src.cpDistancesCumulative || {};
+            createTable(src.data, 'table-3-overall', 'Overall', src.data, src.metadata, src.checkpoints, age, cpDist);
+            createTable(src.data, 'table-3-female', 'Female', src.data, src.metadata, src.checkpoints, age, cpDist);
+            createTable(src.data, 'table-3-male', 'Male', src.data, src.metadata, src.checkpoints, age, cpDist);
         }
 
         function refreshDistanceTables(indexStr) {
@@ -697,9 +698,10 @@
             const src = window.tableSources[ns];
             if (!src || !src.data) return;
             const age = getAgeFilter(ns);
-            createTable(src.data, `table-${idx}-overall`, 'Overall', src.data, src.metadata, src.checkpoints, age);
-            createTable(src.data, `table-${idx}-female`, 'Female', src.data, src.metadata, src.checkpoints, age);
-            createTable(src.data, `table-${idx}-male`, 'Male', src.data, src.metadata, src.checkpoints, age);
+            const cpDist = src.cpDistancesCumulative || {};
+            createTable(src.data, `table-${idx}-overall`, 'Overall', src.data, src.metadata, src.checkpoints, age, cpDist);
+            createTable(src.data, `table-${idx}-female`, 'Female', src.data, src.metadata, src.checkpoints, age, cpDist);
+            createTable(src.data, `table-${idx}-male`, 'Male', src.data, src.metadata, src.checkpoints, age, cpDist);
         }
 
         function calculateRankings(originalData, chiptimeIndex, genderIndex) {
@@ -783,7 +785,7 @@
         // Store metadata for split time calculation
         const tableMetadata = {};
 
-        function createTable(data, tableId, genderFilter = 'Overall', originalData = null, metadata = null, checkpoints = null, ageGroupFilter = 'All') {
+        function createTable(data, tableId, genderFilter = 'Overall', originalData = null, metadata = null, checkpoints = null, ageGroupFilter = 'All', cpDistancesCumulative = null) {
             // Use original data if provided, otherwise use filtered data
             const dataForRanking = originalData || data;
             
@@ -817,6 +819,9 @@
             }
             if (checkpoints) {
                 tableMetadata[tableId + '_checkpoints'] = checkpoints;
+            }
+            if (cpDistancesCumulative) {
+                tableMetadata[tableId + '_cpDistances'] = cpDistancesCumulative;
             }
             
             if (!filteredData || filteredData.length === 0) {
@@ -1072,49 +1077,41 @@
                 
                 if (athleteMetadata && checkpoints && Array.isArray(checkpoints)) {
                     const times = athleteMetadata.times || {};
-                    
-                    // Only show split time if we have at least START and one other checkpoint
-                    const hasStart = times['START'] !== null && times['START'] !== undefined;
-                    const hasOtherCheckpoint = checkpoints.some(cp => cp !== 'START' && times[cp]);
-                    
-                    if (hasStart && hasOtherCheckpoint) {
-                        html += '<strong style="color: #ff66b3; font-size: 1em;">Split Time:</strong><br>';
-                        
-                        // Calculate and show split times
-                        let prevTime = times['START'];
-                        checkpoints.forEach((cp) => {
-                            if (cp === 'START') {
-                                return; // Skip START, it's the starting point
+                    const cpDist = tableMetadata[tableId + '_cpDistances'] || {};
+                    const timingLines = buildCheckpointTimingLines(
+                        times, checkpoints, cpDist, athleteMetadata.athlete
+                    );
+
+                    if (timingLines.length > 0) {
+                        html += '<strong style="color: #ff66b3; font-size: 1em;">Thời gian checkpoint:</strong><br>';
+                        timingLines.forEach(line => {
+                            html += `<span class="detail-label">${line.cp}:</span>`;
+                            html += `<span class="detail-content">${line.clock}`;
+                            if (line.cumulative) {
+                                html += ` <em>(${line.cumulative} từ START)</em>`;
                             }
-                            
-                            const currentTime = times[cp];
-                            if (currentTime && prevTime) {
-                                const splitTime = calculateTimeDifference(prevTime, currentTime);
-                                html += `<span class="detail-label">${cp}:</span>`;
-                                html += `<span class="detail-content"><strong>${splitTime}</strong></span><br>`;
-                                prevTime = currentTime;
+                            html += '</span><br>';
+                            if (line.segment) {
+                                html += `<span class="detail-label">Đoạn → ${line.cp}:</span>`;
+                                html += `<span class="detail-content"><strong>${line.segment}</strong>`;
+                                if (line.segmentPace) html += ` · pace <strong>${line.segmentPace}</strong>`;
+                                if (line.segmentKm > 0) html += ` · ${line.segmentKm} km`;
+                                html += '</span><br>';
                             }
                         });
-                        
-                        // Show total chip time
+
                         if (times['START'] && times['FINISH']) {
                             const chipTime = calculateTimeDifference(times['START'], times['FINISH']);
                             html += `<span class="detail-label">Chip Time:</span>`;
                             html += `<span class="detail-content"><strong>${chipTime}</strong></span><br>`;
-                            
-                            // Calculate and show Pace
-                            const distanceStr = athleteMetadata.athlete?.distance || '';
-                            const distance = parseDistance(distanceStr);
+                            const distance = parseDistance(athleteMetadata.athlete?.distance || '');
                             if (distance > 0) {
-                                const chipTimeInSeconds = (times['FINISH'] - times['START']) / 1000;
-                                const pace = calculatePace(chipTimeInSeconds, distance);
-                                html += `<span class="detail-label">Pace:</span>`;
-                                html += `<span class="detail-content"><strong>${pace}</strong></span><br>`;
+                                const chipSec = (times['FINISH'] - times['START']) / 1000;
+                                html += `<span class="detail-label">Pace tổng:</span>`;
+                                html += `<span class="detail-content"><strong>${calculatePace(chipSec, distance)}</strong></span><br>`;
                             }
-                            html += '<br>';
-                        } else {
-                            html += '<br>';
                         }
+                        html += '<br>';
                     }
                 }
                 
@@ -1510,22 +1507,103 @@
             return 0;
         }
 
-        // Function to get earliest time from lines
+        /** Dòng upload iOS: `CHECKPOINT#yyyy-MM-dd HH:mm:ss:SSS#rssi#antenna` */
+        function parseResultLine(raw) {
+            if (typeof raw !== 'string') return null;
+            const parts = raw.split('#');
+            if (parts.length < 4) return null;
+            return { checkpoint: parts[0], timestampRaw: parts[1], rssi: parts[2], antenna: parts[3] };
+        }
+
+        /** Lấy thời điểm sớm nhất trong `lines` (giống pickEarliestLine trên iOS). */
         function getEarliestTime(lines) {
             if (!lines || typeof lines !== 'object') return null;
             let earliest = null;
             Object.values(lines).forEach(line => {
-                if (typeof line === 'string') {
-                    const parts = line.split('#');
-                    if (parts.length >= 2) {
-                        const dateTime = parseFirebaseDateTime(parts[1]);
-                        if (dateTime && (!earliest || dateTime < earliest)) {
-                            earliest = dateTime;
-                        }
-                    }
+                const parsed = parseResultLine(line);
+                if (!parsed) return;
+                const dateTime = parseFirebaseDateTime(parsed.timestampRaw);
+                if (dateTime && (!earliest || dateTime < earliest)) {
+                    earliest = dateTime;
                 }
             });
             return earliest;
+        }
+
+        function formatDurationSeconds(totalSeconds) {
+            const sec = Math.max(0, Math.floor(totalSeconds));
+            const h = Math.floor(sec / 3600);
+            const m = Math.floor((sec % 3600) / 60);
+            const s = sec % 60;
+            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        }
+
+        /** Giống ResultsConverter.splitDuration — thời gian tích lũy từ START. */
+        function formatCumulativeSplit(startTime, endTime) {
+            if (!startTime || !endTime) return '';
+            const diff = (endTime - startTime) / 1000;
+            if (diff < 0) return '';
+            return `+${formatDurationSeconds(diff)}`;
+        }
+
+        /** RACE_SCRIPT: `cp1_distance` … km tích lũy từ START (theo Setup iOS). */
+        function loadCpDistancesCumulativeKm(eventData) {
+            const script = (eventData && eventData.RACE_SCRIPT) || {};
+            const out = {};
+            for (let i = 1; i <= 8; i++) {
+                const cp = `CP${i}`;
+                const key = `${cp.toLowerCase()}_distance`;
+                const raw = script[key];
+                if (raw == null || !String(raw).trim()) continue;
+                const km = parseDistance(String(raw));
+                if (km > 0) out[cp] = km;
+            }
+            return out;
+        }
+
+        function getCumulativeKmAtCheckpoint(cp, cpDistancesCumulative, athleteDistanceKm) {
+            if (cp === 'START') return 0;
+            if (cp === 'FINISH') return athleteDistanceKm;
+            return cpDistancesCumulative[cp] || 0;
+        }
+
+        function getSegmentKm(prevCp, cp, cpDistancesCumulative, athleteDistanceKm) {
+            const endKm = getCumulativeKmAtCheckpoint(cp, cpDistancesCumulative, athleteDistanceKm);
+            const startKm = getCumulativeKmAtCheckpoint(prevCp, cpDistancesCumulative, athleteDistanceKm);
+            const seg = endKm - startKm;
+            return seg > 0 ? seg : 0;
+        }
+
+        function buildCheckpointTimingLines(times, checkpoints, cpDistancesCumulative, athlete) {
+            if (!times || !times['START'] || !Array.isArray(checkpoints)) return [];
+            const athleteDistanceKm = parseDistance(athlete && athlete.distance);
+            const ordered = ALL_CHECKPOINTS.filter(cp => checkpoints.includes(cp) && times[cp]);
+            const lines = [];
+            let prevCp = 'START';
+            let prevTime = times['START'];
+
+            ordered.forEach(cp => {
+                if (cp === 'START') return;
+                const t = times[cp];
+                const segmentSec = (t - prevTime) / 1000;
+                const cumulativeSec = (t - times['START']) / 1000;
+                const segmentKm = getSegmentKm(prevCp, cp, cpDistancesCumulative, athleteDistanceKm);
+                const cumulativeKm = getCumulativeKmAtCheckpoint(cp, cpDistancesCumulative, athleteDistanceKm);
+
+                lines.push({
+                    cp,
+                    clock: formatTime(t),
+                    cumulative: formatCumulativeSplit(times['START'], t),
+                    segment: segmentSec >= 0 ? formatDurationSeconds(segmentSec) : '',
+                    segmentKm,
+                    segmentPace: segmentKm > 0 && segmentSec >= 0 ? calculatePace(segmentSec, segmentKm) : '',
+                    cumulativePace: cumulativeKm > 0 && cumulativeSec >= 0 ? calculatePace(cumulativeSec, cumulativeKm) : ''
+                });
+
+                prevCp = cp;
+                prevTime = t;
+            });
+            return lines;
         }
 
         // Function to format time as HH:MM:SS
@@ -1603,6 +1681,7 @@
             const raceConfig = eventData.RACE_CONFIG || {};
             const raceStartTimeStr = raceConfig.start_time;
             const raceStartTime = raceStartTimeStr ? parseFirebaseDateTime(raceStartTimeStr) : null;
+            const cpDistancesCumulative = loadCpDistancesCumulativeKm(eventData);
             
             // Create data rows
             const rows = [];
@@ -1759,6 +1838,7 @@
                     data: [header, ...distanceGroups[distanceKey].rows],
                     metadata: distanceGroups[distanceKey].metadata,
                     checkpoints: availableCheckpoints,
+                    cpDistancesCumulative,
                     distance: distanceKey
                 };
             });
@@ -1953,7 +2033,7 @@
                     const loading14 = document.getElementById('loading-14');
                     if (loading14) loading14.style.display = 'none';
                     createTable(race14Data.data, 'table-14', 'Overall', race14Data.data,
-                               race14Data.metadata, race14Data.checkpoints);
+                               race14Data.metadata, race14Data.checkpoints, 'All', race14Data.cpDistancesCumulative);
                 }
 
                 if (race3Data) {
@@ -1965,19 +2045,21 @@
                     if (loading3Male) loading3Male.style.display = 'none';
 
                     window.tableSources.ekiden3 = {
-                        data: race3Data.data,
-                        metadata: race3Data.metadata,
-                        checkpoints: race3Data.checkpoints
-                    };
+                                    data: race3Data.data,
+                                    metadata: race3Data.metadata,
+                                    checkpoints: race3Data.checkpoints,
+                                    cpDistancesCumulative: race3Data.cpDistancesCumulative
+                                };
                     window.ageGroupFilters.ekiden3 = 'All';
                     injectAgeGroupControls(document.getElementById('race-3-age-anchor'), 'ekiden3', race3Data.metadata);
 
+                    const cpDist3 = race3Data.cpDistancesCumulative || {};
                     createTable(race3Data.data, 'table-3-overall', 'Overall', race3Data.data,
-                               race3Data.metadata, race3Data.checkpoints, 'All');
-                    createTable(race3Data.data, 'table-3-female', 'Female', race3Data.data,
-                               race3Data.metadata, race3Data.checkpoints, 'All');
-                    createTable(race3Data.data, 'table-3-male', 'Male', race3Data.data,
-                               race3Data.metadata, race3Data.checkpoints, 'All');
+                               race3Data.metadata, race3Data.checkpoints, 'All', cpDist3);
+                                createTable(race3Data.data, 'table-3-female', 'Female', race3Data.data,
+                                           race3Data.metadata, race3Data.checkpoints, 'All', cpDist3);
+                                createTable(race3Data.data, 'table-3-male', 'Male', race3Data.data,
+                                           race3Data.metadata, race3Data.checkpoints, 'All', cpDist3);
                 }
             } else {
                 const distances = Object.keys(convertedData);
@@ -1992,11 +2074,12 @@
                     if (!distanceData) return;
 
                     const ns = 'dist-' + index;
-                    window.tableSources[ns] = {
-                        data: distanceData.data,
-                        metadata: distanceData.metadata,
-                        checkpoints: distanceData.checkpoints
-                    };
+                                window.tableSources[ns] = {
+                                    data: distanceData.data,
+                                    metadata: distanceData.metadata,
+                                    checkpoints: distanceData.checkpoints,
+                                    cpDistancesCumulative: distanceData.cpDistancesCumulative
+                                };
                     window.ageGroupFilters[ns] = 'All';
                     injectAgeGroupControls(document.getElementById(`distance-${index}-age-anchor`), ns, distanceData.metadata);
 
@@ -2007,12 +2090,13 @@
                     if (loadingFemale) loadingFemale.style.display = 'none';
                     if (loadingMale) loadingMale.style.display = 'none';
 
+                    const cpDist = distanceData.cpDistancesCumulative || {};
                     createTable(distanceData.data, `table-${index}-overall`, 'Overall', distanceData.data,
-                               distanceData.metadata, distanceData.checkpoints, 'All');
-                    createTable(distanceData.data, `table-${index}-female`, 'Female', distanceData.data,
-                               distanceData.metadata, distanceData.checkpoints, 'All');
-                    createTable(distanceData.data, `table-${index}-male`, 'Male', distanceData.data,
-                               distanceData.metadata, distanceData.checkpoints, 'All');
+                               distanceData.metadata, distanceData.checkpoints, 'All', cpDist);
+                                createTable(distanceData.data, `table-${index}-female`, 'Female', distanceData.data,
+                                           distanceData.metadata, distanceData.checkpoints, 'All', cpDist);
+                                createTable(distanceData.data, `table-${index}-male`, 'Male', distanceData.data,
+                                           distanceData.metadata, distanceData.checkpoints, 'All', cpDist);
                 });
             }
         }

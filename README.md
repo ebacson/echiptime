@@ -1,32 +1,48 @@
-# ChipTime Results Viewer
+# ChipTime Results Viewer (Web)
 
-Trang web hiển thị kết quả từ các file Excel của ChipTime.
+Trang web hiển thị kết quả giải chạy đồng bộ từ **Firebase Realtime Database** — cùng cấu trúc dữ liệu mà app **iOS** upload (`{uid}/{event_key}/`).
 
 ## Tính năng
 
-- Hiển thị kết quả từ 2 cự ly: 14.4 KM và 3.6 KM
-- Giao diện đẹp, hiện đại và responsive
-- Thống kê số lượng vận động viên
-- Tải dữ liệu trực tiếp từ file Excel
+- Đọc `RACE_CONFIG` (tên giải, giờ xuất phát), `Athletes`, checkpoint `START` … `CP8` … `FINISH`
+- Hỗ trợ nhiều cự ly (tab động) hoặc chế độ Ekiden
+- Cập nhật realtime khi BTC upload từ iOS
+- Chọn giải khi có nhiều sự kiện trên cùng tài khoản Firebase
 
 ## Cách sử dụng
 
-1. Mở file `index.html` trong trình duyệt
-2. Chọn tab để xem kết quả của từng cự ly
-3. Dữ liệu được đọc trực tiếp từ file Excel
+1. Host / mở `index.html` (cần HTTPS hoặc localhost để Firebase hoạt động ổn định).
+2. Truy cập với tham số URL (khuyến nghị khi dùng app iOS mới):
 
-## Yêu cầu
+   - Một giải cụ thể:  
+     `index.html?uid=FIREBASE_AUTH_UID&event=TEN_GIAI`  
+     (`event` = `event_name` trong Setup, ký tự đặc biệt được thay `_` giống iOS)
+   - Chỉ BTC (liệt kê mọi giải của uid):  
+     `index.html?uid=FIREBASE_AUTH_UID`
+   - Dữ liệu cũ (giải nằm ngay tại root RTDB):  
+     `index.html?event=NO_NAME`
 
-- Trình duyệt web hiện đại (Chrome, Firefox, Safari, Edge)
-- File Excel phải cùng thư mục với file HTML
+3. Không có tham số: trang tự quét root — nhận diện `{event}/` (legacy) hoặc `{uid}/{event}/` (iOS).
 
-## Cấu trúc file
+**Lấy `uid`:** Firebase Console → Authentication → User UID của tài khoản BTC đăng nhập trên iOS.
+
+## Cấu trúc Firebase (iOS)
+
+```
+{sanitized_uid}/
+  {sanitized_event_name}/
+    RACE_CONFIG/   → event_name, start_time
+    Athletes/      → bib, name, gen, age, distance, ...
+    START|CP1|...|FINISH/{tagId}/lines/{md5}: "CP#time#rssi#ant"
+```
+
+## File chính
 
 ```
 Web/
 ├── index.html
-├── Results_14.4KM.xlsx
-└── Results_3.6KM.xlsx
+├── echiptime_logo.png
+└── README.md
 ```
 
 ## Triển khai

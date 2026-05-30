@@ -124,6 +124,26 @@
             text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
         }
 
+        .event-picker-wrap {
+            text-align: center;
+            margin-top: 12px;
+        }
+
+        .event-picker-label {
+            color: rgba(255,255,255,0.95);
+            font-size: 0.95em;
+            margin-right: 8px;
+        }
+
+        .event-picker {
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 2px solid white;
+            background: rgba(255, 255, 255, 0.9);
+            font-size: 1em;
+            max-width: min(100%, 420px);
+        }
+
         .tabs {
             display: flex;
             justify-content: center;
@@ -411,6 +431,10 @@
             <div class="header-titles">
                 <h1 id="race-title">Kết quả</h1>
                 <p id="race-start-time" class="race-start-time"></p>
+                <div id="event-picker-wrap" class="event-picker-wrap" style="display: none;">
+                    <label class="event-picker-label" for="event-picker">Giải chạy:</label>
+                    <select id="event-picker" class="event-picker"></select>
+                </div>
             </div>
         </div>
         
@@ -1250,6 +1274,174 @@
             'table-14': null
         };
 
+        // Cùng danh sách checkpoint với iOS (ResultsConverter.allCheckpoints)
+        const ALL_CHECKPOINTS = ['START', 'CP1', 'CP2', 'CP3', 'CP4', 'CP5', 'CP6', 'CP7', 'CP8', 'FINISH'];
+
+        let firebaseValueUnsubscribe = null;
+        let activeEventContext = { uid: '', eventKey: '', dbPath: '' };
+
+        /** Giống FirebaseKeySanitizer trên iOS — ký tự . # $ [ ] / → _ */
+        function firebaseKeySanitize(s) {
+            return String(s || '').replace(/[.#$\[\]\/]/g, '_');
+        }
+
+        function getQueryParams() {
+            const params = new URLSearchParams(window.location.search);
+            return {
+                uid: (params.get('uid') || '').trim(),
+                event: (params.get('event') || params.get('event_name') || '').trim()
+            };
+        }
+
+        /** Node có cấu trúc một giải (Athletes / RACE_CONFIG / checkpoint) */
+        function isEventPayload(data) {
+            if (!data || typeof data !== 'object' || Array.isArray(data)) return false;
+            if (data.Athletes || data.RACE_CONFIG) return true;
+            return ALL_CHECKPOINTS.some(cp => data[cp] != null);
+        }
+
+        function buildEventDbPath(uid, eventKey) {
+            const ev = firebaseKeySanitize(eventKey);
+            const u = (uid || '').trim();
+            if (u) {
+                return `${firebaseKeySanitize(u)}/${ev}`;
+            }
+            return ev;
+        }
+
+        function getEventDisplayName(eventData, fallbackKey) {
+            const cfg = eventData && eventData.RACE_CONFIG;
+            const name = cfg && cfg.event_name;
+            if (name && String(name).trim()) {
+                return String(name).trim();
+            }
+            return String(fallbackKey || '').replace(/_/g, ' ');
+        }
+
+        function showGlobalError(message) {
+            document.querySelectorAll('.loading').forEach(el => { el.style.display = 'none'; });
+            document.querySelectorAll('.error').forEach(el => {
+                el.style.display = 'block';
+                el.textContent = `Lỗi: ${message}`;
+            });
+        }
+
+        function detachFirebaseListener() {
+            if (firebaseValueUnsubscribe) {
+                firebaseValueUnsubscribe();
+                firebaseValueUnsubscribe = null;
+            }
+        }
+
+        function attachFirebaseListener(dbPath, onData) {
+            detachFirebaseListener();
+            const dataRef = window.firebaseRef(window.firebaseDatabase, dbPath);
+            firebaseValueUnsubscribe = window.firebaseOnValue(dataRef, (snap) => {
+                if (snap.exists()) {
+                    onData(snap.val());
+                }
+            });
+        }
+
+        function renderEventPicker(events, selectedPath) {
+            const wrap = document.getElementById('event-picker-wrap');
+            const select = document.getElementById('event-picker');
+            if (!wrap || !select || events.length <= 1) {
+                if (wrap) wrap.style.display = 'none';
+                return;
+            }
+            wrap.style.display = 'block';
+            select.innerHTML = events.map(ev => {
+                const label = ev.displayName || ev.eventKey.replace(/_/g, ' ');
+                const selected = ev.dbPath === selectedPath ? ' selected' : '';
+                return `<option value="${ev.dbPath}"${selected}>${label}</option>`;
+            }).join('');
+            select.onchange = () => {
+                const chosen = events.find(e => e.dbPath === select.value);
+                if (chosen) {
+                    loadDataFromFirebase(chosen.uid, chosen.eventKey, chosen.displayName);
+                }
+            };
+        }
+
+        /** Quét RTDB: legacy {event}/... hoặc iOS {uid}/{event}/... */
+        async function discoverEvents() {
+            const rootRef = window.firebaseRef(window.firebaseDatabase, '/');
+            const snapshot = await window.firebaseGet(rootRef);
+            if (!snapshot.exists()) return [];
+
+            const rootData = snapshot.val() || {};
+            const found = [];
+
+            for (const rootKey of Object.keys(rootData)) {
+                const node = rootData[rootKey];
+                if (!node || typeof node !== 'object') continue;
+
+                if (isEventPayload(node)) {
+                    found.push({
+                        uid: '',
+                        eventKey: rootKey,
+                        dbPath: firebaseKeySanitize(rootKey),
+                        displayName: getEventDisplayName(node, rootKey)
+                    });
+                    continue;
+                }
+
+                for (const eventKey of Object.keys(node)) {
+                    const eventNode = node[eventKey];
+                    if (isEventPayload(eventNode)) {
+                        found.push({
+                            uid: rootKey,
+                            eventKey: eventKey,
+                            dbPath: buildEventDbPath(rootKey, eventKey),
+                            displayName: getEventDisplayName(eventNode, eventKey)
+                        });
+                    }
+                }
+            }
+
+            return found;
+        }
+
+        async function resolveEventTarget() {
+            const qp = getQueryParams();
+            if (qp.uid && qp.event) {
+                return {
+                    uid: qp.uid,
+                    eventKey: qp.event,
+                    dbPath: buildEventDbPath(qp.uid, qp.event),
+                    displayName: qp.event.replace(/_/g, ' ')
+                };
+            }
+            if (qp.event && !qp.uid) {
+                return {
+                    uid: '',
+                    eventKey: qp.event,
+                    dbPath: firebaseKeySanitize(qp.event),
+                    displayName: qp.event.replace(/_/g, ' ')
+                };
+            }
+
+            const all = await discoverEvents();
+            if (all.length === 0) {
+                throw new Error('Không tìm thấy giải chạy trên Firebase');
+            }
+
+            if (qp.uid && !qp.event) {
+                const forUid = all.filter(e => e.uid === qp.uid || firebaseKeySanitize(e.uid) === firebaseKeySanitize(qp.uid));
+                if (forUid.length === 0) {
+                    throw new Error('Không có giải nào cho uid đã chỉ định');
+                }
+                if (forUid.length === 1) return forUid[0];
+                renderEventPicker(forUid, forUid[0].dbPath);
+                return forUid[0];
+            }
+
+            if (all.length === 1) return all[0];
+            renderEventPicker(all, all[0].dbPath);
+            return all[0];
+        }
+
         // Format RACE_CONFIG start_time for display: "2026-01-24 17:50:00:000" -> "24/01/2026 17:50"
         function formatStartTimeDisplay(startTimeStr) {
             if (!startTimeStr || typeof startTimeStr !== 'string') return '';
@@ -1371,8 +1563,7 @@
             });
             console.log('convertFirebaseDataToArray - Unique distances found:', Array.from(uniqueDistances));
             
-            // Define all possible checkpoints
-            const allCheckpoints = ['START', 'CP1', 'CP2', 'CP3', 'FINISH'];
+            const allCheckpoints = ALL_CHECKPOINTS;
             const checkpointData = {};
             allCheckpoints.forEach(cp => {
                 checkpointData[cp] = eventData[cp] || {};
@@ -1695,265 +1886,197 @@
             }
         }
 
-        // Function to update race name in UI
-        function updateRaceName(raceName) {
-            console.log('updateRaceName called with:', raceName);
+        // Function to update race name in UI (displayName = tiêu đề, eventKeyForLogic = phân loại EKIDEN/tab)
+        function updateRaceName(displayName, eventKeyForLogic) {
+            console.log('updateRaceName called with:', displayName, eventKeyForLogic);
             
-            if (raceName && typeof raceName === 'string' && raceName.trim()) {
-                // Replace underscores with spaces for display
-                const displayName = raceName.replace(/_/g, ' ');
+            if (displayName && typeof displayName === 'string' && displayName.trim()) {
+                const titleText = displayName.trim();
+                const logicKey = (eventKeyForLogic && String(eventKeyForLogic).trim()) ? eventKeyForLogic : titleText;
                 
-                // Update page title
-                const newTitle = `Kết quả ${displayName}`;
-                document.title = newTitle;
-                console.log('Page title updated to:', newTitle);
+                document.title = `Kết quả ${titleText}`;
                 
-                // Update header - try multiple times if element not ready
                 const updateHeader = () => {
                     const titleElement = document.getElementById('race-title');
                     if (titleElement) {
-                        titleElement.textContent = displayName;
-                        console.log('Header updated successfully to:', displayName);
+                        titleElement.textContent = titleText;
                     } else {
-                        console.log('Race title element not found, retrying...');
                         setTimeout(updateHeader, 100);
                     }
                 };
-                
                 updateHeader();
-                
-                // Setup tabs based on event_name (use original name for logic)
-                setupTabsBasedOnEventName(raceName);
-            } else {
-                console.log('Invalid race name:', raceName, 'Type:', typeof raceName);
+                setupTabsBasedOnEventName(logicKey);
             }
         }
 
-        // Function to load race name from Firebase
-        function loadRaceName() {
-            console.log('loadRaceName called');
-            
-            if (!window.firebaseDatabase || !window.firebaseRef || !window.firebaseGet || !window.firebaseOnValue) {
-                console.log('Firebase not ready, retrying in 500ms...');
-                setTimeout(loadRaceName, 500);
-                return;
+        function applyFirebaseEventData(firebaseData, eventKeyForLogic, displayName) {
+            const raceConfig = firebaseData.RACE_CONFIG || {};
+            const startTimeStr = raceConfig.start_time;
+            const startTimeEl = document.getElementById('race-start-time');
+            if (startTimeEl) {
+                startTimeEl.textContent = startTimeStr ? formatStartTimeDisplay(startTimeStr) : '';
+                startTimeEl.style.display = startTimeStr ? 'block' : 'none';
             }
-            
-            console.log('Firebase is ready, loading event_name from root nodes...');
-            
-            // Read all root level nodes - each node name is an event_name
-            const rootRef = window.firebaseRef(window.firebaseDatabase, '/');
-            
-            window.firebaseGet(rootRef)
-                .then((snapshot) => {
-                    if (snapshot.exists()) {
-                        const rootData = snapshot.val();
-                        const rootKeys = Object.keys(rootData || {});
-                        console.log('Root level nodes:', rootKeys);
-                        
-                        // Use the first node name as event_name
-                        if (rootKeys.length > 0) {
-                            const firstNodeName = rootKeys[0];
-                            console.log('Using first root node as event_name:', firstNodeName);
-                            updateRaceName(firstNodeName);
-                            
-                            // Load data after updating race name
-                            setTimeout(() => {
-                                loadDataFromFirebase(firstNodeName);
-                            }, 300);
-                            
-                            // Set up real-time listener for this node
-                            const nodeRef = window.firebaseRef(window.firebaseDatabase, firstNodeName);
-                            window.firebaseOnValue(nodeRef, (snap) => {
-                                // Node name might change, but we'll keep using the first one
-                                console.log('Node value changed, but keeping node name as event_name');
-                            });
-                        } else {
-                            console.log('No nodes found at root level');
-                        }
-                    } else {
-                        console.log('Root does not exist');
+
+            const titleName = getEventDisplayName(firebaseData, displayName || eventKeyForLogic);
+            updateRaceName(titleName, eventKeyForLogic);
+
+            const convertedData = convertFirebaseDataToArray({ [eventKeyForLogic]: firebaseData });
+
+            console.log('applyFirebaseEventData - convertedData keys:', convertedData ? Object.keys(convertedData) : 'null');
+
+            if (!convertedData || Object.keys(convertedData).length === 0) {
+                throw new Error('Dữ liệu không hợp lệ hoặc chưa có vận động viên');
+            }
+
+            window.ageGroupFilters = {};
+            window.tableSources = {};
+
+            const isEkiden = eventKeyForLogic.includes('EKIDEN') || eventKeyForLogic.includes('Ekiden')
+                || titleName.includes('EKIDEN') || titleName.includes('Ekiden');
+            console.log('applyFirebaseEventData - isEkiden:', isEkiden);
+
+            if (isEkiden) {
+                let race14Data = null;
+                let race3Data = null;
+
+                Object.keys(convertedData).forEach(distanceKey => {
+                    const distance = String(distanceKey).trim().toUpperCase();
+                    if (distance.includes('14.4') || distance.includes('14,4')) {
+                        race14Data = convertedData[distanceKey];
+                    } else if (distance.includes('3.6') || distance.includes('3,6')) {
+                        race3Data = convertedData[distanceKey];
                     }
-                })
-                .catch((error) => {
-                    console.error('Error reading root nodes:', error);
                 });
+
+                if (race14Data) {
+                    const loading14 = document.getElementById('loading-14');
+                    if (loading14) loading14.style.display = 'none';
+                    createTable(race14Data.data, 'table-14', 'Overall', race14Data.data,
+                               race14Data.metadata, race14Data.checkpoints);
+                }
+
+                if (race3Data) {
+                    const loading3Overall = document.getElementById('loading-3-overall');
+                    const loading3Female = document.getElementById('loading-3-female');
+                    const loading3Male = document.getElementById('loading-3-male');
+                    if (loading3Overall) loading3Overall.style.display = 'none';
+                    if (loading3Female) loading3Female.style.display = 'none';
+                    if (loading3Male) loading3Male.style.display = 'none';
+
+                    window.tableSources.ekiden3 = {
+                        data: race3Data.data,
+                        metadata: race3Data.metadata,
+                        checkpoints: race3Data.checkpoints
+                    };
+                    window.ageGroupFilters.ekiden3 = 'All';
+                    injectAgeGroupControls(document.getElementById('race-3-age-anchor'), 'ekiden3', race3Data.metadata);
+
+                    createTable(race3Data.data, 'table-3-overall', 'Overall', race3Data.data,
+                               race3Data.metadata, race3Data.checkpoints, 'All');
+                    createTable(race3Data.data, 'table-3-female', 'Female', race3Data.data,
+                               race3Data.metadata, race3Data.checkpoints, 'All');
+                    createTable(race3Data.data, 'table-3-male', 'Male', race3Data.data,
+                               race3Data.metadata, race3Data.checkpoints, 'All');
+                }
+            } else {
+                const distances = Object.keys(convertedData);
+                if (distances.length === 0) {
+                    throw new Error('Không tìm thấy dữ liệu cự ly');
+                }
+
+                createDistanceTabs(distances);
+
+                distances.forEach((distance, index) => {
+                    const distanceData = convertedData[distance];
+                    if (!distanceData) return;
+
+                    const ns = 'dist-' + index;
+                    window.tableSources[ns] = {
+                        data: distanceData.data,
+                        metadata: distanceData.metadata,
+                        checkpoints: distanceData.checkpoints
+                    };
+                    window.ageGroupFilters[ns] = 'All';
+                    injectAgeGroupControls(document.getElementById(`distance-${index}-age-anchor`), ns, distanceData.metadata);
+
+                    const loadingOverall = document.getElementById(`loading-${index}-overall`);
+                    const loadingFemale = document.getElementById(`loading-${index}-female`);
+                    const loadingMale = document.getElementById(`loading-${index}-male`);
+                    if (loadingOverall) loadingOverall.style.display = 'none';
+                    if (loadingFemale) loadingFemale.style.display = 'none';
+                    if (loadingMale) loadingMale.style.display = 'none';
+
+                    createTable(distanceData.data, `table-${index}-overall`, 'Overall', distanceData.data,
+                               distanceData.metadata, distanceData.checkpoints, 'All');
+                    createTable(distanceData.data, `table-${index}-female`, 'Female', distanceData.data,
+                               distanceData.metadata, distanceData.checkpoints, 'All');
+                    createTable(distanceData.data, `table-${index}-male`, 'Male', distanceData.data,
+                               distanceData.metadata, distanceData.checkpoints, 'All');
+                });
+            }
         }
 
-        // Function to load data from Firebase
-        function loadDataFromFirebase(eventName) {
-            if (!eventName) {
-                console.log('No event_name provided, waiting...');
+        /** Tải giải từ path {uid}/{eventKey} (iOS) hoặc {eventKey} (legacy) */
+        function loadDataFromFirebase(uid, eventKey, displayNameHint) {
+            const dbPath = buildEventDbPath(uid, eventKey);
+            if (!dbPath) {
+                console.log('No event path provided');
                 return;
             }
-            
-            console.log('Loading data for event:', eventName);
-            
-            // Load data from Firebase using event_name as the root path
-            const dataRef = window.firebaseRef(window.firebaseDatabase, eventName);
+
+            console.log('Loading Firebase path:', dbPath);
+            activeEventContext = { uid: uid || '', eventKey, dbPath };
+
+            const dataRef = window.firebaseRef(window.firebaseDatabase, dbPath);
             window.firebaseGet(dataRef)
                 .then((snapshot) => {
-                    if (snapshot.exists()) {
-                        const firebaseData = snapshot.val();
-                        
-                        // Hiển thị start_time từ RACE_CONFIG dưới tên sự kiện
-                        const raceConfig = firebaseData.RACE_CONFIG || {};
-                        const startTimeStr = raceConfig.start_time;
-                        const startTimeEl = document.getElementById('race-start-time');
-                        if (startTimeEl) {
-                            startTimeEl.textContent = startTimeStr ? formatStartTimeDisplay(startTimeStr) : '';
-                            startTimeEl.style.display = startTimeStr ? 'block' : 'none';
-                        }
-                        
-                        const convertedData = convertFirebaseDataToArray({ [eventName]: firebaseData });
-                        
-                        console.log('loadDataFromFirebase - convertedData:', convertedData);
-                        console.log('loadDataFromFirebase - convertedData keys:', convertedData ? Object.keys(convertedData) : 'null');
-                        
-                        if (!convertedData || Object.keys(convertedData).length === 0) {
-                            console.error('loadDataFromFirebase - No converted data or empty keys');
-                            throw new Error('Dữ liệu không hợp lệ');
-                        }
-                        
-                        window.ageGroupFilters = {};
-                        window.tableSources = {};
-                        
-                        // Get current event_name to determine mode
-                        const isEkiden = eventName.includes('EKIDEN') || eventName.includes('Ekiden');
-                        console.log('loadDataFromFirebase - isEkiden:', isEkiden);
-                        
-                        if (isEkiden) {
-                            // EKIDEN mode: TEAM and Cá Nhân
-                            // Find 14.4KM and 3.6KM data
-                            let race14Data = null;
-                            let race3Data = null;
-                            
-                            Object.keys(convertedData).forEach(distanceKey => {
-                                const distance = String(distanceKey).trim().toUpperCase();
-                                if (distance.includes('14.4') || distance.includes('14,4')) {
-                                    race14Data = convertedData[distanceKey];
-                                } else if (distance.includes('3.6') || distance.includes('3,6')) {
-                                    race3Data = convertedData[distanceKey];
-                                }
-                            });
-                            
-                            if (race14Data) {
-                                const loading14 = document.getElementById('loading-14');
-                                if (loading14) loading14.style.display = 'none';
-                                createTable(race14Data.data, 'table-14', 'Overall', race14Data.data, 
-                                           race14Data.metadata, race14Data.checkpoints);
-                            }
-                            
-                            if (race3Data) {
-                                const loading3Overall = document.getElementById('loading-3-overall');
-                                const loading3Female = document.getElementById('loading-3-female');
-                                const loading3Male = document.getElementById('loading-3-male');
-                                if (loading3Overall) loading3Overall.style.display = 'none';
-                                if (loading3Female) loading3Female.style.display = 'none';
-                                if (loading3Male) loading3Male.style.display = 'none';
-                                
-                                window.tableSources.ekiden3 = {
-                                    data: race3Data.data,
-                                    metadata: race3Data.metadata,
-                                    checkpoints: race3Data.checkpoints
-                                };
-                                window.ageGroupFilters.ekiden3 = 'All';
-                                injectAgeGroupControls(document.getElementById('race-3-age-anchor'), 'ekiden3', race3Data.metadata);
-                                
-                                createTable(race3Data.data, 'table-3-overall', 'Overall', race3Data.data,
-                                           race3Data.metadata, race3Data.checkpoints, 'All');
-                                createTable(race3Data.data, 'table-3-female', 'Female', race3Data.data,
-                                           race3Data.metadata, race3Data.checkpoints, 'All');
-                                createTable(race3Data.data, 'table-3-male', 'Male', race3Data.data,
-                                           race3Data.metadata, race3Data.checkpoints, 'All');
-                            }
-                        } else {
-                            // Distance mode: create tabs dynamically based on distances found
-                            const distances = Object.keys(convertedData);
-                            if (distances.length === 0) {
-                                throw new Error('Không tìm thấy dữ liệu cự ly');
-                            }
-                            
-                            // Create tabs for all distances
-                            createDistanceTabs(distances);
-                            
-                            // Load data for each distance
-                            distances.forEach((distance, index) => {
-                                const distanceData = convertedData[distance];
-                                if (!distanceData) return;
-                                
-                                const ns = 'dist-' + index;
-                                window.tableSources[ns] = {
-                                    data: distanceData.data,
-                                    metadata: distanceData.metadata,
-                                    checkpoints: distanceData.checkpoints
-                                };
-                                window.ageGroupFilters[ns] = 'All';
-                                injectAgeGroupControls(document.getElementById(`distance-${index}-age-anchor`), ns, distanceData.metadata);
-                                
-                                // Hide loading indicators
-                                const loadingOverall = document.getElementById(`loading-${index}-overall`);
-                                const loadingFemale = document.getElementById(`loading-${index}-female`);
-                                const loadingMale = document.getElementById(`loading-${index}-male`);
-                                if (loadingOverall) loadingOverall.style.display = 'none';
-                                if (loadingFemale) loadingFemale.style.display = 'none';
-                                if (loadingMale) loadingMale.style.display = 'none';
-                                
-                                // Create tables for each gender
-                                createTable(distanceData.data, `table-${index}-overall`, 'Overall', distanceData.data,
-                                           distanceData.metadata, distanceData.checkpoints, 'All');
-                                createTable(distanceData.data, `table-${index}-female`, 'Female', distanceData.data,
-                                           distanceData.metadata, distanceData.checkpoints, 'All');
-                                createTable(distanceData.data, `table-${index}-male`, 'Male', distanceData.data,
-                                           distanceData.metadata, distanceData.checkpoints, 'All');
-                            });
-                        }
-                    } else {
-                        throw new Error('Không tìm thấy dữ liệu');
+                    if (!snapshot.exists()) {
+                        throw new Error('Không tìm thấy dữ liệu giải trên Firebase');
                     }
+                    applyFirebaseEventData(snapshot.val(), eventKey, displayNameHint);
+                    attachFirebaseListener(dbPath, (firebaseData) => {
+                        try {
+                            applyFirebaseEventData(firebaseData, eventKey, displayNameHint);
+                        } catch (err) {
+                            console.error('Realtime update error:', err);
+                        }
+                    });
                 })
                 .catch(error => {
-                    // Hide all loading indicators
-                    const allLoadings = document.querySelectorAll('.loading');
-                    allLoadings.forEach(el => el.style.display = 'none');
-                    
-                    // Show errors
-                    const allErrors = document.querySelectorAll('.error');
-                    allErrors.forEach(el => {
-                        el.style.display = 'block';
-                        el.textContent = `Lỗi: ${error.message}`;
-                    });
+                    showGlobalError(error.message);
                     console.error('Firebase error:', error);
                 });
         }
 
-        // Load data from Firebase when page loads
+        async function initializeFromFirebase() {
+            if (!window.firebaseDatabase || !window.firebaseRef || !window.firebaseGet || !window.firebaseOnValue) {
+                setTimeout(initializeFromFirebase, 500);
+                return;
+            }
+
+            try {
+                const target = await resolveEventTarget();
+                console.log('Resolved event:', target);
+                loadDataFromFirebase(target.uid, target.eventKey, target.displayName);
+            } catch (error) {
+                showGlobalError(error.message);
+                console.error('initializeFromFirebase:', error);
+            }
+        }
+
         window.addEventListener('DOMContentLoaded', () => {
-            // Wait for Firebase to initialize
             const checkFirebase = setInterval(() => {
-                if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet) {
+                if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet && window.firebaseOnValue) {
                     clearInterval(checkFirebase);
-                    
-                    // Load race name first (it will automatically load data)
-                    setTimeout(() => {
-                        console.log('Calling loadRaceName after Firebase initialization');
-                        loadRaceName();
-                    }, 200);
+                    setTimeout(initializeFromFirebase, 200);
                 }
             }, 100);
-            
-            // Timeout after 10 seconds
+
             setTimeout(() => {
                 clearInterval(checkFirebase);
                 if (!window.firebaseDatabase) {
-                    console.error('Firebase initialization timeout');
-                    const allLoadings = document.querySelectorAll('.loading');
-                    allLoadings.forEach(el => el.style.display = 'none');
-                    const allErrors = document.querySelectorAll('.error');
-                    allErrors.forEach(el => {
-                        el.style.display = 'block';
-                        el.textContent = 'Lỗi: Không thể kết nối Firebase';
-                    });
+                    showGlobalError('Không thể kết nối Firebase');
                 }
             }, 10000);
         });

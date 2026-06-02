@@ -1,0 +1,29 @@
+{
+  "RACE_CONFIG": {
+    "event_name": "FIXTURE_MISSING_CP",
+    "start_time": "2026-01-19 07:00:00:000"
+  },
+  "RACE_SCRIPT": {
+    "race_checkpoint": "5 Check point",
+    "checkpoint_summary": "START/CP1/CP2/CP3/FINISH",
+    "cp1_distance": "3.0KM",
+    "cp2_distance": "6.0KM",
+    "cp3_distance": "9.0KM"
+  },
+  "Athletes": {
+    "TAG010": { "bib": "010", "name": "Runner Skip CP2", "gen": "M", "age": "B", "distance": "10.0KM" }
+  },
+  "START": {
+    "TAG010": { "lines": { "a": "START#2026-01-19 07:00:05:000#70#1" } }
+  },
+  "CP1": {
+    "TAG010": { "lines": { "b": "CP1#2026-01-19 07:14:05:000#70#1" } }
+  },
+  "CP3": {
+    "TAG010": { "lines": { "c": "CP3#2026-01-19 07:45:05:000#70#1" } }
+  },
+  "FINISH": {
+    "TAG010": { "lines": { "d": "FINISH#2026-01-19 07:55:05:000#70#1" } }
+  }
+}
+

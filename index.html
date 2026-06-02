@@ -144,6 +144,27 @@
             max-width: min(100%, 420px);
         }
 
+        .copy-link-btn {
+            margin-left: 10px;
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 2px solid white;
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .copy-link-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        .copy-link-btn:active {
+            transform: translateY(0px);
+        }
+
         .tabs {
             display: flex;
             justify-content: center;
@@ -434,6 +455,7 @@
                 <div id="event-picker-wrap" class="event-picker-wrap" style="display: none;">
                     <label class="event-picker-label" for="event-picker">Giải chạy:</label>
                     <select id="event-picker" class="event-picker"></select>
+                    <button id="copy-link-btn" class="copy-link-btn" type="button" style="display:none;">Copy link</button>
                 </div>
             </div>
         </div>
@@ -499,6 +521,8 @@
         <!-- Distance mode: tabs will be created dynamically -->
         <div id="distance-tabs-container"></div>
     </div>
+
+    <script src="app.js"></script>
 
     <script>
         function showTab(tabId) {
@@ -1091,8 +1115,15 @@
                                 html += ` <em>(${line.cumulative} từ START)</em>`;
                             }
                             html += '</span><br>';
+                            if (line.cumulativePace) {
+                                html += `<span class="detail-label">Pace tới ${line.cp}:</span>`;
+                                html += `<span class="detail-content"><strong>${line.cumulativePace}</strong>`;
+                                if (line.cumulativeKm > 0) html += ` · ${line.cumulativeKm} km`;
+                                html += '</span><br>';
+                            }
                             if (line.segment) {
-                                html += `<span class="detail-label">Đoạn → ${line.cp}:</span>`;
+                                const fromCp = line.fromCp || 'START';
+                                html += `<span class="detail-label">Đoạn ${fromCp} → ${line.cp}:</span>`;
                                 html += `<span class="detail-content"><strong>${line.segment}</strong>`;
                                 if (line.segmentPace) html += ` · pace <strong>${line.segmentPace}</strong>`;
                                 if (line.segmentKm > 0) html += ` · ${line.segmentKm} km`;
@@ -1286,7 +1317,8 @@
             const params = new URLSearchParams(window.location.search);
             return {
                 uid: (params.get('uid') || '').trim(),
-                event: (params.get('event') || params.get('event_name') || '').trim()
+                event: (params.get('event') || params.get('event_name') || '').trim(),
+                fixture: (params.get('fixture') || '').trim()
             };
         }
 
@@ -1330,12 +1362,84 @@
             }
         }
 
+        function buildShareUrl(uid, eventKey) {
+            const base = `${window.location.origin}${window.location.pathname}`;
+            const params = new URLSearchParams();
+            if (uid) params.set('uid', uid);
+            if (eventKey) params.set('event', eventKey);
+            const qs = params.toString();
+            return qs ? `${base}?${qs}` : base;
+        }
+
+        async function copyToClipboard(text) {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                }
+            } catch (_) {}
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.setAttribute('readonly', 'true');
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                return ok;
+            } catch (_) {
+                return false;
+            }
+        }
+
+        function updateCopyLinkButton() {
+            const btn = document.getElementById('copy-link-btn');
+            if (!btn) return;
+            const uid = (activeEventContext && activeEventContext.uid) ? String(activeEventContext.uid) : '';
+            const eventKey = (activeEventContext && activeEventContext.eventKey) ? String(activeEventContext.eventKey) : '';
+            if (!eventKey) {
+                btn.style.display = 'none';
+                return;
+            }
+            btn.style.display = 'inline-block';
+            btn.onclick = async () => {
+                const url = buildShareUrl(uid, eventKey);
+                const ok = await copyToClipboard(url);
+                const old = btn.textContent;
+                btn.textContent = ok ? 'Đã copy' : 'Copy lỗi';
+                setTimeout(() => { btn.textContent = old || 'Copy link'; }, 1200);
+            };
+        }
+
         function attachFirebaseListener(dbPath, onData) {
             detachFirebaseListener();
             const dataRef = window.firebaseRef(window.firebaseDatabase, dbPath);
+            let lastAppliedAt = 0;
+            let timer = null;
+            let pending = null;
+            const MIN_INTERVAL_MS = 600;
+
+            const flush = () => {
+                timer = null;
+                lastAppliedAt = Date.now();
+                const d = pending;
+                pending = null;
+                if (d != null) onData(d);
+            };
+
+            const schedule = (data) => {
+                pending = data;
+                if (timer) return;
+                const now = Date.now();
+                const wait = Math.max(0, MIN_INTERVAL_MS - (now - lastAppliedAt));
+                timer = setTimeout(flush, wait);
+            };
+
             firebaseValueUnsubscribe = window.firebaseOnValue(dataRef, (snap) => {
                 if (snap.exists()) {
-                    onData(snap.val());
+                    schedule(snap.val());
                 }
             });
         }
@@ -1402,6 +1506,14 @@
 
         async function resolveEventTarget() {
             const qp = getQueryParams();
+            if (qp.fixture) {
+                return {
+                    uid: '',
+                    eventKey: qp.fixture,
+                    dbPath: '',
+                    displayName: qp.fixture.replace(/_/g, ' ')
+                };
+            }
             if (qp.uid && qp.event) {
                 return {
                     uid: qp.uid,
@@ -1591,12 +1703,14 @@
                 const cumulativeKm = getCumulativeKmAtCheckpoint(cp, cpDistancesCumulative, athleteDistanceKm);
 
                 lines.push({
+                    fromCp: prevCp,
                     cp,
                     clock: formatTime(t),
                     cumulative: formatCumulativeSplit(times['START'], t),
                     segment: segmentSec >= 0 ? formatDurationSeconds(segmentSec) : '',
                     segmentKm,
                     segmentPace: segmentKm > 0 && segmentSec >= 0 ? calculatePace(segmentSec, segmentKm) : '',
+                    cumulativeKm,
                     cumulativePace: cumulativeKm > 0 && cumulativeSec >= 0 ? calculatePace(cumulativeSec, cumulativeKm) : ''
                 });
 
@@ -2111,6 +2225,7 @@
 
             console.log('Loading Firebase path:', dbPath);
             activeEventContext = { uid: uid || '', eventKey, dbPath };
+            updateCopyLinkButton();
 
             const dataRef = window.firebaseRef(window.firebaseDatabase, dbPath);
             window.firebaseGet(dataRef)
@@ -2122,6 +2237,7 @@
                     attachFirebaseListener(dbPath, (firebaseData) => {
                         try {
                             applyFirebaseEventData(firebaseData, eventKey, displayNameHint);
+                            updateCopyLinkButton();
                         } catch (err) {
                             console.error('Realtime update error:', err);
                         }
@@ -2142,6 +2258,11 @@
             try {
                 const target = await resolveEventTarget();
                 console.log('Resolved event:', target);
+                if (target.dbPath === '' && target.eventKey) {
+                    // Fixture mode: index.html?fixture=fixture_basic.json
+                    await window.__loadFixture(target.eventKey, target.eventKey);
+                    return;
+                }
                 loadDataFromFirebase(target.uid, target.eventKey, target.displayName);
             } catch (error) {
                 showGlobalError(error.message);

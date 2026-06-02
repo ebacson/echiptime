@@ -1,0 +1,33 @@
+{
+  "RACE_CONFIG": {
+    "event_name": "FIXTURE_BASIC",
+    "start_time": "2026-01-19 07:00:00:000"
+  },
+  "RACE_SCRIPT": {
+    "race_checkpoint": "4 Check point",
+    "checkpoint_summary": "START/CP1/CP2/FINISH",
+    "cp1_distance": "5.0KM",
+    "cp2_distance": "10.0KM"
+  },
+  "Athletes": {
+    "TAG001": { "bib": "001", "name": "Runner One", "gen": "M", "age": "A", "distance": "14.4KM" },
+    "TAG002": { "bib": "002", "name": "Runner Two", "gen": "F", "age": "A", "distance": "14.4KM" }
+  },
+  "START": {
+    "TAG001": { "lines": { "a": "START#2026-01-19 07:00:05:000#70#1" } },
+    "TAG002": { "lines": { "b": "START#2026-01-19 07:00:08:000#70#1" } }
+  },
+  "CP1": {
+    "TAG001": { "lines": { "c": "CP1#2026-01-19 07:25:05:000#70#1" } },
+    "TAG002": { "lines": { "d": "CP1#2026-01-19 07:27:05:000#70#1" } }
+  },
+  "CP2": {
+    "TAG001": { "lines": { "e": "CP2#2026-01-19 07:55:05:000#70#1" } },
+    "TAG002": { "lines": { "f": "CP2#2026-01-19 07:58:05:000#70#1" } }
+  },
+  "FINISH": {
+    "TAG001": { "lines": { "g": "FINISH#2026-01-19 08:15:05:000#70#1" } },
+    "TAG002": { "lines": { "h": "FINISH#2026-01-19 08:22:05:000#70#1" } }
+  }
+}
+

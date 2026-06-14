@@ -566,15 +566,21 @@
         function timeToSeconds(timeStr) {
             if (!timeStr) return Infinity;
             const str = String(timeStr).trim();
-            
+
+            // HH:MM:SS.SSS (chip time / split with milliseconds)
+            const dotIdx = str.indexOf('.');
+            if (dotIdx > 0) {
+                const base = timeStringToSeconds(str.slice(0, dotIdx));
+                const ms = parseInt(str.slice(dotIdx + 1), 10) || 0;
+                if (base > 0 || str.startsWith('00:')) return base + ms / 1000;
+            }
+
             // Format: HH:MM:SS or MM:SS
             const parts = str.split(':');
             if (parts.length === 2) {
-                // MM:SS
-                return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+                return parseInt(parts[0], 10) * 60 + parseFloat(parts[1]);
             } else if (parts.length === 3) {
-                // HH:MM:SS
-                return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+                return parseInt(parts[0], 10) * 3600 + parseInt(parts[1], 10) * 60 + parseFloat(parts[2]);
             }
             return Infinity;
         }
@@ -1564,26 +1570,37 @@
             return s;
         }
 
-        // Function to parse datetime string from Firebase
+        // Function to parse datetime string from Firebase (yyyy-MM-dd HH:mm:ss:SSS)
         function parseFirebaseDateTime(dateTimeStr) {
-            // Format: "2026-01-19 17:25:05:551"
-            const parts = dateTimeStr.split(' ');
+            const s = String(dateTimeStr || '').trim();
+            if (!s) return null;
+            const msMatch = s.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2}):(\d{2}):(\d{3})$/);
+            if (msMatch) {
+                const [, datePart, hh, mm, ss, ms] = msMatch;
+                return new Date(`${datePart}T${hh}:${mm}:${ss}.${ms}`);
+            }
+            const parts = s.split(' ');
             if (parts.length !== 2) return null;
-            
-            const datePart = parts[0]; // "2026-01-19"
-            const timePart = parts[1].split(':').slice(0, 3).join(':'); // "17:25:05"
-            
-            return new Date(`${datePart}T${timePart}`);
+            const timePart = parts[1].split(':').slice(0, 3).join(':');
+            return new Date(`${parts[0]}T${timePart}`);
         }
 
-        // Function to calculate time difference in HH:MM:SS format
+        function formatDurationMillis(ms) {
+            const total = Math.max(0, Math.round(ms));
+            const h = Math.floor(total / 3600000);
+            const rem = total % 3600000;
+            const m = Math.floor(rem / 60000);
+            const rem2 = rem % 60000;
+            const s = Math.floor(rem2 / 1000);
+            const sub = rem2 % 1000;
+            return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(sub).padStart(3, '0')}`;
+        }
+
+        // Function to calculate chip time (FINISH - START) with millisecond precision
         function calculateTimeDifference(startTime, endTime) {
             if (!startTime || !endTime) return '';
-            const diff = (endTime - startTime) / 1000; // difference in seconds
-            const hours = Math.floor(diff / 3600);
-            const minutes = Math.floor((diff % 3600) / 60);
-            const seconds = Math.floor(diff % 60);
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const diffMs = Math.max(0, Math.round(endTime - startTime));
+            return formatDurationMillis(diffMs);
         }
 
         // Function to calculate Pace (time per km) from time in seconds and distance in km
@@ -1627,35 +1644,52 @@
             return { checkpoint: parts[0], timestampRaw: parts[1], rssi: parts[2], antenna: parts[3] };
         }
 
-        /** Lấy thời điểm sớm nhất trong `lines` (giống pickEarliestLine trên iOS). */
+        /** Lấy thời điểm sớm nhất trong `lines` (CP khác START). */
         function getEarliestTime(lines) {
+            return pickLineTime(lines, false);
+        }
+
+        /** START: lấy thời điểm muộn nhất trong `lines`. */
+        function getLatestTime(lines) {
+            return pickLineTime(lines, true);
+        }
+
+        function pickLineTime(lines, preferLatest) {
             if (!lines || typeof lines !== 'object') return null;
-            let earliest = null;
+            let best = null;
             Object.values(lines).forEach(line => {
                 const parsed = parseResultLine(line);
                 if (!parsed) return;
                 const dateTime = parseFirebaseDateTime(parsed.timestampRaw);
-                if (dateTime && (!earliest || dateTime < earliest)) {
-                    earliest = dateTime;
+                if (!dateTime) return;
+                if (best === null) {
+                    best = dateTime;
+                } else if (preferLatest) {
+                    if (dateTime > best) best = dateTime;
+                } else if (dateTime < best) {
+                    best = dateTime;
                 }
             });
-            return earliest;
+            return best;
+        }
+
+        /** START: muộn nhất; nếu sớm hơn start_time giải thì lấy start_time. */
+        function resolveStartTime(lines, raceStartTime) {
+            const latest = getLatestTime(lines);
+            if (!latest) return null;
+            if (raceStartTime && latest < raceStartTime) return raceStartTime;
+            return latest;
         }
 
         function formatDurationSeconds(totalSeconds) {
-            const sec = Math.max(0, Math.floor(totalSeconds));
-            const h = Math.floor(sec / 3600);
-            const m = Math.floor((sec % 3600) / 60);
-            const s = sec % 60;
-            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            return formatDurationMillis(Math.max(0, Math.round(totalSeconds * 1000)));
         }
 
         /** Giống ResultsConverter.splitDuration — thời gian tích lũy từ START. */
         function formatCumulativeSplit(startTime, endTime) {
             if (!startTime || !endTime) return '';
-            const diff = (endTime - startTime) / 1000;
-            if (diff < 0) return '';
-            return `+${formatDurationSeconds(diff)}`;
+            const diffMs = Math.max(0, Math.round(endTime - startTime));
+            return `+${formatDurationMillis(diffMs)}`;
         }
 
         /** RACE_SCRIPT: `cp1_distance` … km tích lũy từ START (theo Setup iOS). */
@@ -1707,7 +1741,7 @@
                     cp,
                     clock: formatTime(t),
                     cumulative: formatCumulativeSplit(times['START'], t),
-                    segment: segmentSec >= 0 ? formatDurationSeconds(segmentSec) : '',
+                    segment: segmentSec >= 0 ? formatDurationMillis((t - prevTime)) : '',
                     segmentKm,
                     segmentPace: segmentKm > 0 && segmentSec >= 0 ? calculatePace(segmentSec, segmentKm) : '',
                     cumulativeKm,
@@ -1720,13 +1754,14 @@
             return lines;
         }
 
-        // Function to format time as HH:MM:SS
+        // Function to format time as HH:MM:SS.SSS
         function formatTime(date) {
             if (!date) return '';
             const hours = date.getHours().toString().padStart(2, '0');
             const minutes = date.getMinutes().toString().padStart(2, '0');
             const seconds = date.getSeconds().toString().padStart(2, '0');
-            return `${hours}:${minutes}:${seconds}`;
+            const ms = date.getMilliseconds().toString().padStart(3, '0');
+            return `${hours}:${minutes}:${seconds}.${ms}`;
         }
 
         // Function to convert Firebase data to array format (Excel-like)
@@ -1812,7 +1847,11 @@
                     const times = {};
                     availableCheckpoints.forEach(cp => {
                         const lines = checkpointData[cp][tagId]?.lines || {};
-                        times[cp] = getEarliestTime(lines);
+                        if (cp === 'START') {
+                            times[cp] = resolveStartTime(lines, raceStartTime);
+                        } else {
+                            times[cp] = getEarliestTime(lines);
+                        }
                     });
                     
                     // Nếu VĐV có checkpoint khác mà không có START thì lấy start_time làm START
@@ -1821,10 +1860,6 @@
                         if (hasOtherCheckpoint) {
                             times['START'] = raceStartTime;
                         }
-                    }
-                    // Nếu VĐV có START sớm hơn start_time thì lấy bằng start_time
-                    if (times['START'] && raceStartTime && times['START'] < raceStartTime) {
-                        times['START'] = raceStartTime;
                     }
                     
                     // Calculate Chip Time (FINISH - START)

@@ -53,19 +53,25 @@
     return seg > 0 ? seg : 0;
   };
 
+  window.formatDurationMillis = window.formatDurationMillis || function formatDurationMillis(ms) {
+    const total = Math.max(0, Math.round(ms));
+    const h = Math.floor(total / 3600000);
+    const rem = total % 3600000;
+    const m = Math.floor(rem / 60000);
+    const rem2 = rem % 60000;
+    const s = Math.floor(rem2 / 1000);
+    const sub = rem2 % 1000;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(sub).padStart(3, '0')}`;
+  };
+
   window.formatDurationSeconds = window.formatDurationSeconds || function formatDurationSeconds(totalSeconds) {
-    const sec = Math.max(0, Math.floor(totalSeconds));
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return window.formatDurationMillis(Math.max(0, Math.round(totalSeconds * 1000)));
   };
 
   window.formatCumulativeSplit = window.formatCumulativeSplit || function formatCumulativeSplit(startTime, endTime) {
     if (!startTime || !endTime) return '';
-    const diff = (endTime - startTime) / 1000;
-    if (diff < 0) return '';
-    return `+${window.formatDurationSeconds(diff)}`;
+    const diffMs = Math.max(0, Math.round(endTime - startTime));
+    return `+${window.formatDurationMillis(diffMs)}`;
   };
 
   // iOS line format: "CP#yyyy-MM-dd HH:mm:ss:SSS#rssi#antenna"
@@ -76,16 +82,38 @@
     return { checkpoint: parts[0], timestampRaw: parts[1], rssi: parts[2], antenna: parts[3] };
   };
 
-  window.getEarliestTime = window.getEarliestTime || function getEarliestTime(lines) {
+  function pickLineTime(lines, preferLatest) {
     if (!lines || typeof lines !== 'object') return null;
-    let earliest = null;
+    let best = null;
     Object.values(lines).forEach((line) => {
       const parsed = window.parseResultLine(line);
       if (!parsed) return;
       const dt = window.parseFirebaseDateTime(parsed.timestampRaw);
-      if (dt && (!earliest || dt < earliest)) earliest = dt;
+      if (!dt) return;
+      if (best === null) {
+        best = dt;
+      } else if (preferLatest) {
+        if (dt > best) best = dt;
+      } else if (dt < best) {
+        best = dt;
+      }
     });
-    return earliest;
+    return best;
+  }
+
+  window.getEarliestTime = window.getEarliestTime || function getEarliestTime(lines) {
+    return pickLineTime(lines, false);
+  };
+
+  window.getLatestTime = window.getLatestTime || function getLatestTime(lines) {
+    return pickLineTime(lines, true);
+  };
+
+  window.resolveStartTime = window.resolveStartTime || function resolveStartTime(lines, raceStartTime) {
+    const latest = window.getLatestTime(lines);
+    if (!latest) return null;
+    if (raceStartTime && latest < raceStartTime) return raceStartTime;
+    return latest;
   };
 
   window.buildCheckpointTimingLines = window.buildCheckpointTimingLines || function buildCheckpointTimingLines(times, checkpoints, cpDistancesCumulative, athlete) {
@@ -109,7 +137,7 @@
         cp,
         clock: window.formatTime(t),
         cumulative: window.formatCumulativeSplit(times.START, t),
-        segment: segmentSec >= 0 ? window.formatDurationSeconds(segmentSec) : '',
+        segment: segmentSec >= 0 ? window.formatDurationMillis(t - prevTime) : '',
         segmentKm,
         segmentPace: segmentKm > 0 && segmentSec >= 0 ? window.calculatePace(segmentSec, segmentKm) : '',
         cumulativeKm,

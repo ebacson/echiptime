@@ -18,6 +18,125 @@
   let firebaseLoadState = 'loading';
   let firebaseValueUnsubscribe = null;
   let discoveredEvents = [];
+  let authListenerAttached = false;
+
+  function getAuthUid() {
+    return (window.authCurrentUser && window.authCurrentUser.uid) ? window.authCurrentUser.uid : '';
+  }
+
+  function getEffectiveUid() {
+    const authUid = getAuthUid();
+    if (authUid) return authUid;
+    return (getQueryParams().uid || '').trim();
+  }
+
+  function needsLogin() {
+    const qp = getQueryParams();
+    if (qp.fixture) return false;
+    if (getAuthUid()) return false;
+    if (qp.uid) return false;
+    if (qp.event && !qp.uid) return false;
+    return true;
+  }
+
+  function showAuthError(message) {
+    const el = document.getElementById('auth-error');
+    if (!el) return;
+    el.textContent = message || '';
+    el.style.display = message ? 'block' : 'none';
+  }
+
+  function setAuthUi(user) {
+    const authPanel = document.getElementById('auth-panel');
+    const mainApp = document.getElementById('main-app');
+    const userBar = document.getElementById('user-bar');
+    const userEmail = document.getElementById('user-email');
+    const loginRequired = needsLogin();
+
+    if (authPanel) authPanel.style.display = loginRequired ? 'block' : 'none';
+    if (mainApp) mainApp.classList.toggle('hidden', loginRequired);
+
+    if (userBar && userEmail) {
+      if (user && user.email) {
+        userBar.style.display = 'flex';
+        userEmail.textContent = user.email;
+      } else if (getEffectiveUid() && !loginRequired) {
+        userBar.style.display = 'flex';
+        userEmail.textContent = `UID: ${getEffectiveUid().slice(0, 8)}...`;
+      } else {
+        userBar.style.display = 'none';
+        userEmail.textContent = '';
+      }
+    }
+  }
+
+  function authErrorMessage(err) {
+    const code = err && err.code ? String(err.code) : '';
+    const map = {
+      'auth/invalid-email': 'Email không hợp lệ',
+      'auth/user-disabled': 'Tài khoản đã bị vô hiệu hóa',
+      'auth/user-not-found': 'Email hoặc mật khẩu không đúng',
+      'auth/wrong-password': 'Email hoặc mật khẩu không đúng',
+      'auth/invalid-credential': 'Email hoặc mật khẩu không đúng',
+      'auth/too-many-requests': 'Đăng nhập quá nhiều lần. Thử lại sau.',
+      'auth/network-request-failed': 'Lỗi mạng. Kiểm tra kết nối internet.',
+    };
+    return map[code] || (err && err.message) || 'Đăng nhập thất bại';
+  }
+
+  function waitForAuthInit() {
+    return new Promise((resolve) => {
+      if (window.firebaseAuthReady) {
+        resolve(window.authCurrentUser);
+        return;
+      }
+      const prev = window.onAuthStateReady;
+      window.onAuthStateReady = (user) => {
+        if (typeof prev === 'function') prev(user);
+        window.onAuthStateReady = prev;
+        resolve(user);
+      };
+      setTimeout(() => resolve(window.authCurrentUser), 5000);
+    });
+  }
+
+  async function handleAuthChange(user) {
+    setAuthUi(user);
+    showAuthError('');
+
+    const qp = getQueryParams();
+    if (qp.fixture) return;
+
+    if (needsLogin()) {
+      firebaseLoadState = 'idle';
+      showLoading(false);
+      detachFirebaseListener();
+      showStatus('Đăng nhập tài khoản BTC để tải danh sách VĐV', 'info');
+      return;
+    }
+
+    try {
+      showLoading(true);
+      await resolveAndLoad();
+    } catch (err) {
+      firebaseLoadState = 'error';
+      showLoading(false);
+      const countEl = document.getElementById('athlete-count');
+      if (countEl) countEl.textContent = 'Lỗi tải';
+      showStatus(err.message || 'Lỗi tải dữ liệu Firebase', 'error');
+      console.error(err);
+    }
+  }
+
+  function attachAuthListener() {
+    if (authListenerAttached) return;
+    authListenerAttached = true;
+    const prev = window.onAuthStateReady;
+    window.onAuthStateReady = (user) => {
+      if (typeof prev === 'function') prev(user);
+      handleAuthChange(user);
+    };
+  }
 
   function firebaseKeySanitize(s) {
     return String(s || '').replace(/[.#$\[\]\/]/g, '_');
@@ -122,10 +241,12 @@
   function updateFirebasePathLabel() {
     const el = document.getElementById('firebase-path');
     if (!el) return;
+    const uid = getEffectiveUid();
     if (activeContext.dbPath) {
-      el.textContent = `Firebase: ${activeContext.dbPath}`;
+      const uidHint = uid ? ` | UID: ${uid.slice(0, 8)}...` : '';
+      el.textContent = `Firebase: ${activeContext.dbPath}${uidHint}`;
     } else {
-      el.textContent = '';
+      el.textContent = uid ? `UID: ${uid}` : '';
     }
   }
 
@@ -189,6 +310,8 @@
 
   async function resolveEventTarget() {
     const qp = getQueryParams();
+    const effectiveUid = getEffectiveUid();
+
     if (qp.fixture) {
       return {
         uid: '',
@@ -197,15 +320,15 @@
         displayName: qp.fixture.replace(/_/g, ' '),
       };
     }
-    if (qp.uid && qp.event) {
+    if (effectiveUid && qp.event) {
       return {
-        uid: qp.uid,
+        uid: effectiveUid,
         eventKey: qp.event,
-        dbPath: buildEventDbPath(qp.uid, qp.event),
+        dbPath: buildEventDbPath(effectiveUid, qp.event),
         displayName: qp.event.replace(/_/g, ' '),
       };
     }
-    if (qp.event && !qp.uid) {
+    if (qp.event && !effectiveUid) {
       return {
         uid: '',
         eventKey: qp.event,
@@ -216,15 +339,15 @@
 
     const all = await discoverEvents();
     if (all.length === 0) {
-      throw new Error('Không tìm thấy giải chạy trên Firebase. Thêm ?uid=...&event=... vào URL.');
+      throw new Error('Không tìm thấy giải chạy trên Firebase. Đăng nhập hoặc thêm ?event=... vào URL.');
     }
 
-    if (qp.uid && !qp.event) {
+    if (effectiveUid && !qp.event) {
       const forUid = all.filter(
-        (e) => e.uid === qp.uid || firebaseKeySanitize(e.uid) === firebaseKeySanitize(qp.uid)
+        (e) => e.uid === effectiveUid || firebaseKeySanitize(e.uid) === firebaseKeySanitize(effectiveUid)
       );
       if (forUid.length === 0) {
-        throw new Error('Không có giải nào cho uid đã chỉ định');
+        throw new Error('Không có giải nào cho tài khoản đã đăng nhập. Tạo giải trên app iOS trước.');
       }
       if (forUid.length === 1) return forUid[0];
       renderEventPicker(forUid, forUid[0].dbPath);
@@ -828,17 +951,68 @@
         }
       });
     }
+
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) {
+      loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const emailEl = document.getElementById('login-email');
+        const passEl = document.getElementById('login-password');
+        const btn = document.getElementById('login-btn');
+        const email = emailEl ? emailEl.value.trim() : '';
+        const password = passEl ? passEl.value : '';
+        if (!email || !password) {
+          showAuthError('Vui lòng nhập email và mật khẩu');
+          return;
+        }
+        showAuthError('');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = 'Đang đăng nhập...';
+        }
+        try {
+          if (!window.firebaseSignIn) throw new Error('Firebase Auth chưa sẵn sàng');
+          await window.firebaseSignIn(email, password);
+        } catch (err) {
+          showAuthError(authErrorMessage(err));
+          console.error('Login error:', err);
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Đăng nhập';
+          }
+        }
+      });
+    }
+
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        try {
+          await stopQrScanner();
+          detachFirebaseListener();
+          pendingBib = '';
+          firebaseLoadState = 'idle';
+          athletesByBib = new Map();
+          allAthletes = [];
+          if (window.firebaseSignOut) await window.firebaseSignOut();
+        } catch (err) {
+          showStatus(authErrorMessage(err), 'error');
+        }
+      });
+    }
   }
 
   async function init() {
     bindUi();
+    attachAuthListener();
     showLoading(true);
 
     const waitFirebase = () => new Promise((resolve, reject) => {
       let tries = 0;
       const t = setInterval(() => {
         tries += 1;
-        if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet) {
+        if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet && window.firebaseSignIn) {
           clearInterval(t);
           resolve();
         } else if (tries > 50) {
@@ -850,8 +1024,15 @@
 
     try {
       const qp = getQueryParams();
-      if (!qp.fixture) await waitFirebase();
-      await resolveAndLoad();
+      if (qp.fixture) {
+        setAuthUi(null);
+        await loadFixture(qp.fixture);
+        return;
+      }
+
+      await waitFirebase();
+      await waitForAuthInit();
+      await handleAuthChange(window.authCurrentUser);
     } catch (err) {
       firebaseLoadState = 'error';
       showLoading(false);

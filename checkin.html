@@ -10,6 +10,12 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
         import { getDatabase, ref, get, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import {
+            getAuth,
+            signInWithEmailAndPassword,
+            signOut,
+            onAuthStateChanged
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyAiCvMlAAC3q87a7MEFLl3XDv0pkdkK93o",
@@ -23,7 +29,23 @@
         };
 
         const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
         const database = getDatabase(app);
+
+        window.firebaseAuth = auth;
+        window.firebaseSignIn = (email, password) => signInWithEmailAndPassword(auth, email, password);
+        window.firebaseSignOut = () => signOut(auth);
+        window.authCurrentUser = null;
+        window.firebaseAuthReady = false;
+
+        onAuthStateChanged(auth, (user) => {
+            window.authCurrentUser = user;
+            window.firebaseAuthReady = true;
+            if (typeof window.onAuthStateReady === 'function') {
+                window.onAuthStateReady(user);
+            }
+        });
+
         window.firebaseDatabase = database;
         window.firebaseRef = ref;
         window.firebaseGet = get;
@@ -129,6 +151,73 @@
             color: rgba(255,255,255,0.85);
             font-size: 0.78rem;
             word-break: break-all;
+        }
+
+        .auth-card h2 {
+            font-size: 1.1rem;
+            color: #ff66b3;
+            margin-bottom: 8px;
+        }
+
+        .auth-card p {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 14px;
+            line-height: 1.45;
+        }
+
+        .auth-form {
+            display: grid;
+            gap: 10px;
+        }
+
+        .auth-form input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid #ffd6eb;
+            border-radius: 12px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .auth-form input:focus {
+            border-color: #ff66b3;
+        }
+
+        .user-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .user-email {
+            color: white;
+            font-size: 0.88rem;
+            font-weight: 600;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            border-radius: 20px;
+            padding: 6px 14px;
+            max-width: 100%;
+            word-break: break-all;
+        }
+
+        .btn-logout {
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 2px solid white;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        #main-app.hidden {
+            display: none;
         }
 
         .card {
@@ -464,8 +553,24 @@
                 <select id="event-picker" class="event-picker"></select>
             </div>
             <small id="firebase-path"></small>
+            <div id="user-bar" class="user-bar" style="display:none;">
+                <span class="user-email" id="user-email"></span>
+                <button type="button" id="logout-btn" class="btn-logout">Đăng xuất</button>
+            </div>
         </header>
 
+        <section id="auth-panel" class="card auth-card" style="display:none;">
+            <h2>Đăng nhập BTC</h2>
+            <p>Dùng tài khoản eChipTime (cùng email/mật khẩu trên app iOS). Sau đăng nhập, hệ thống tự lấy UID Firebase của bạn.</p>
+            <form id="login-form" class="auth-form">
+                <input type="email" id="login-email" placeholder="Email" autocomplete="username" required>
+                <input type="password" id="login-password" placeholder="Mật khẩu" autocomplete="current-password" required>
+                <button type="submit" class="btn btn-primary btn-block" id="login-btn">Đăng nhập</button>
+            </form>
+            <div id="auth-error" class="status-message error" style="display:none;"></div>
+        </section>
+
+        <div id="main-app">
         <div id="loading">
             <div class="spinner"></div>
             Đang tải danh sách vận động viên...
@@ -502,6 +607,7 @@
             <div id="athlete-card"></div>
             <button type="button" id="rescan-btn" class="btn btn-secondary">Quét VĐV khác</button>
         </section>
+        </div>
     </div>
 
     <script src="checkin.js"></script>

@@ -14,7 +14,7 @@
   let currentFacingMode = 'environment';
   let cameraRunning = false;
   let nativeScanFrameId = null;
-  let pendingBib = '';
+  let pendingSearch = '';
   let firebaseLoadState = 'loading';
   let firebaseValueUnsubscribe = null;
   let discoveredEvents = [];
@@ -425,6 +425,96 @@
     }) || null;
   }
 
+  function normalizeDigits(s) {
+    return String(s || '').replace(/\D/g, '');
+  }
+
+  function normalizeSearchQuery(raw) {
+    return String(raw || '').trim();
+  }
+
+  function findAthletesByQuery(rawQuery) {
+    const query = normalizeSearchQuery(rawQuery);
+    if (!query) return [];
+
+    const bibHit = findAthleteByBib(query);
+    if (bibHit) return [bibHit];
+
+    const extractedBib = extractBibFromQr(query);
+    if (extractedBib) {
+      const fromQr = findAthleteByBib(normalizeBib(extractedBib));
+      if (fromQr) return [fromQr];
+    }
+
+    const qLower = query.toLowerCase();
+    const qDigits = normalizeDigits(query);
+    const results = [];
+    const seen = new Set();
+
+    const add = (a) => {
+      const key = a.firebaseKey || normalizeBib(a.bib);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      results.push(a);
+    };
+
+    allAthletes.forEach((a) => {
+      const name = (a.name || '').toLowerCase();
+      if (name && name.includes(qLower)) add(a);
+    });
+
+    if (qDigits.length >= 6) {
+      allAthletes.forEach((a) => {
+        const phone = normalizeDigits(a.phone);
+        const pid = normalizeDigits(a.personalId);
+        if (phone && phone.includes(qDigits)) add(a);
+        if (pid && pid.includes(qDigits)) add(a);
+      });
+    }
+
+    if (/^[0-9A-Za-z-]+$/.test(query)) {
+      const qUpper = query.toUpperCase();
+      allAthletes.forEach((a) => {
+        const bib = normalizeBib(a.bib);
+        if (bib && bib.includes(qUpper)) add(a);
+      });
+    }
+
+    return results.sort((a, b) => normalizeBib(a.bib).localeCompare(normalizeBib(b.bib)));
+  }
+
+  function renderSearchResultsList(athletes, query) {
+    const card = document.getElementById('athlete-card');
+    if (!card) return;
+
+    const items = athletes.map((a) => `
+      <button type="button" class="search-result-item" data-bib="${escapeHtml(normalizeBib(a.bib))}">
+        <strong>${escapeHtml(a.bib || '—')}</strong> — ${escapeHtml(a.name || '—')}
+        ${a.phone ? `<span class="member-meta">SĐT: ${escapeHtml(a.phone)}</span>` : ''}
+        ${a.personalId ? `<span class="member-meta">CCCD: ${escapeHtml(a.personalId)}</span>` : ''}
+      </button>`).join('');
+
+    card.innerHTML = `
+      <h3 class="search-results-title">Tìm thấy ${athletes.length} VĐV — chọn để xem chi tiết</h3>
+      <div class="search-results-list">${items}</div>`;
+    card.classList.add('visible');
+    card.classList.remove('error');
+
+    const empty = document.getElementById('empty-state');
+    if (empty) empty.style.display = 'none';
+
+    card.querySelectorAll('.search-result-item').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const bib = btn.getAttribute('data-bib');
+        const athlete = findAthleteByBib(bib);
+        if (athlete) renderAthleteCard(athlete);
+      });
+    });
+
+    showStatus(`Tìm thấy ${athletes.length} VĐV cho "${query}"`, 'info');
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
   function getTeamPrefix(bib) {
     const parts = bib.split('-');
     return parts.length > 1 ? parts[0] : bib;
@@ -525,53 +615,70 @@
     card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
-  function showNotFound(bib) {
+  function showNotFound(query) {
     const card = document.getElementById('athlete-card');
     if (card) {
       card.innerHTML = `
         <div class="not-found">
           <div class="not-found-icon">?</div>
-          <h2>Không tìm thấy BIB</h2>
-          <p>Mã <strong>${escapeHtml(bib)}</strong> không có trong danh sách vận động viên của giải.</p>
+          <h2>Không tìm thấy VĐV</h2>
+          <p>Không có kết quả cho <strong>${escapeHtml(query)}</strong> trong danh sách giải.</p>
         </div>`;
       card.classList.add('visible', 'error');
     }
-    showStatus(`Đã quét mã "${bib}" — không có trong danh sách giải`, 'error');
+    showStatus(`Không tìm thấy VĐV cho "${query}"`, 'error');
   }
 
-  function lookupAndShow(rawBib) {
-    const extracted = extractBibFromQr(rawBib);
-    const bib = normalizeBib(extracted);
-    if (!bib) {
-      showStatus('Mã BIB không hợp lệ', 'error');
+  function executeLookup(rawQuery, options) {
+    const opts = options || {};
+    const fromQr = !!opts.fromQr;
+    const query = fromQr
+      ? normalizeSearchQuery(extractBibFromQr(rawQuery) || rawQuery)
+      : normalizeSearchQuery(rawQuery);
+
+    if (!query) {
+      showStatus(fromQr ? 'Mã QR không hợp lệ' : 'Vui lòng nhập BIB, Tên, SĐT hoặc CCCD', 'error');
       return;
     }
 
-    const manual = document.getElementById('manual-bib');
-    if (manual) manual.value = bib;
+    const manual = document.getElementById('manual-search');
+    if (manual) manual.value = fromQr ? normalizeBib(query) : query;
 
     if (firebaseLoadState !== 'ready') {
-      pendingBib = bib;
-      showStatus(`Đã quét BIB ${bib} — đang tải danh sách VĐV...`, 'info');
+      pendingSearch = query;
+      showStatus(`Đã nhận "${query}" — đang tải danh sách VĐV...`, 'info');
       return;
     }
 
-    if (!athletesByBib.size) {
-      pendingBib = bib;
+    if (!allAthletes.length) {
+      pendingSearch = query;
       showStatus(
-        `Đã quét BIB ${bib} — giải này chưa có VĐV (0 VĐV). Upload danh sách từ app iOS hoặc chọn đúng giải ở trên.`,
+        `Đã nhận "${query}" — giải này chưa có VĐV (0 VĐV). Upload danh sách từ app iOS hoặc chọn đúng giải.`,
         'error'
       );
       return;
     }
 
-    pendingBib = '';
-    const athlete = findAthleteByBib(bib);
-    if (athlete) {
-      renderAthleteCard(athlete);
+    pendingSearch = '';
+    let matches = [];
+    if (fromQr) {
+      const hit = findAthleteByBib(normalizeBib(query));
+      if (hit) matches = [hit];
     } else {
-      showNotFound(bib);
+      matches = findAthletesByQuery(query);
     }
+
+    if (matches.length === 1) {
+      renderAthleteCard(matches[0]);
+    } else if (matches.length > 1) {
+      renderSearchResultsList(matches, query);
+    } else {
+      showNotFound(query);
+    }
+  }
+
+  function lookupAndShow(rawQuery, options) {
+    executeLookup(rawQuery, options);
   }
 
   function onQrDecoded(text) {
@@ -585,7 +692,7 @@
     lastScanAt = now;
 
     console.log('QR decoded:', text, '→ BIB:', bib);
-    lookupAndShow(bib);
+    lookupAndShow(text, { fromQr: true });
 
     if (navigator.vibrate) navigator.vibrate(80);
   }
@@ -814,10 +921,10 @@
     const qp = getQueryParams();
     const cardVisible = document.getElementById('athlete-card')?.classList.contains('visible');
 
-    if (pendingBib) {
-      lookupAndShow(pendingBib);
+    if (pendingSearch) {
+      executeLookup(pendingSearch, { fromQr: false });
     } else if (qp.bib) {
-      lookupAndShow(qp.bib);
+      executeLookup(qp.bib, { fromQr: true });
     } else if (!allAthletes.length) {
       showStatus('Chưa có VĐV cho giải này. Upload Athletes từ app iOS hoặc chọn giải khác.', 'error');
     } else if (!cardVisible) {
@@ -887,8 +994,8 @@
     if (form) {
       form.addEventListener('submit', (e) => {
         e.preventDefault();
-        const input = document.getElementById('manual-bib');
-        lookupAndShow(input ? input.value : '');
+        const input = document.getElementById('manual-search');
+        executeLookup(input ? input.value : '', { fromQr: false });
       });
     }
 
@@ -934,7 +1041,7 @@
         }
         const empty = document.getElementById('empty-state');
         if (empty) empty.style.display = 'block';
-        const manual = document.getElementById('manual-bib');
+        const manual = document.getElementById('manual-search');
         if (manual) manual.value = '';
         if (cameraRunning) {
           showStatus('Đưa mã QR vào giữa khung hình, giữ ổn định 1–2 giây', 'info');
@@ -983,7 +1090,7 @@
         try {
           await stopQrScanner();
           detachFirebaseListener();
-          pendingBib = '';
+          pendingSearch = '';
           firebaseLoadState = 'idle';
           athletesByBib = new Map();
           allAthletes = [];

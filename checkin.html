@@ -465,7 +465,39 @@
             word-break: break-all;
         }
 
-        .team-members {
+        .search-results-title {
+            font-size: 1rem;
+            color: #ff66b3;
+            margin-bottom: 12px;
+        }
+
+        .search-results-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .search-result-item {
+            width: 100%;
+            text-align: left;
+            padding: 12px 14px;
+            border: 2px solid #ffd6eb;
+            border-radius: 12px;
+            background: #fff5fa;
+            cursor: pointer;
+            font-size: 0.95rem;
+            line-height: 1.4;
+        }
+
+        .search-result-item:active {
+            background: #ffe0f0;
+        }
+
+        .search-result-item .member-meta {
+            display: block;
+            margin-top: 4px;
+            color: #888;
+            font-size: 0.85rem;
+        }
             margin-top: 20px;
             padding-top: 16px;
             border-top: 2px dashed #ffd6eb;
@@ -584,7 +616,7 @@
                 <button type="button" id="stop-camera-btn" class="btn btn-secondary">Tắt camera</button>
             </div>
             <form id="manual-form" class="manual-form">
-                <input type="text" id="manual-bib" placeholder="Hoặc nhập BIB thủ công (vd: 3553-A)" autocomplete="off" autocapitalize="characters">
+                <input type="text" id="manual-search" placeholder="BIB, Tên, SĐT hoặc CCCD" autocomplete="off">
                 <button type="submit" class="btn btn-primary">Tra cứu</button>
             </form>
             <div id="status-message" class="status-message"></div>
@@ -593,7 +625,7 @@
         <section class="card">
             <div id="empty-state">
                 <div class="icon">📋</div>
-                <p>Chưa quét mã nào.<br>Đưa mã QR BIB vào khung camera hoặc nhập BIB ở trên.</p>
+                <p>Chưa tra cứu VĐV nào.<br>Quét QR, hoặc nhập BIB / Tên / SĐT / CCCD ở trên.</p>
             </div>
             <div id="athlete-card"></div>
             <button type="button" id="rescan-btn" class="btn btn-secondary">Quét VĐV khác</button>

@@ -15,6 +15,9 @@
   let cameraRunning = false;
   let nativeScanFrameId = null;
   let pendingBib = '';
+  let firebaseLoadState = 'loading';
+  let firebaseValueUnsubscribe = null;
+  let discoveredEvents = [];
 
   function firebaseKeySanitize(s) {
     return String(s || '').replace(/[.#$\[\]\/]/g, '_');
@@ -100,6 +103,137 @@
   function showLoading(show) {
     const el = document.getElementById('loading');
     if (el) el.style.display = show ? 'block' : 'none';
+  }
+
+  function getAthletesNode(data) {
+    if (!data || typeof data !== 'object') return {};
+    if (data.Athletes && typeof data.Athletes === 'object') return data.Athletes;
+    if (data.athletes && typeof data.athletes === 'object') return data.athletes;
+    return {};
+  }
+
+  function detachFirebaseListener() {
+    if (firebaseValueUnsubscribe) {
+      firebaseValueUnsubscribe();
+      firebaseValueUnsubscribe = null;
+    }
+  }
+
+  function updateFirebasePathLabel() {
+    const el = document.getElementById('firebase-path');
+    if (!el) return;
+    if (activeContext.dbPath) {
+      el.textContent = `Firebase: ${activeContext.dbPath}`;
+    } else {
+      el.textContent = '';
+    }
+  }
+
+  function renderEventPicker(events, selectedPath) {
+    const wrap = document.getElementById('event-picker-wrap');
+    const select = document.getElementById('event-picker');
+    discoveredEvents = events;
+    if (!wrap || !select || events.length <= 1) {
+      if (wrap) wrap.style.display = 'none';
+      return;
+    }
+    wrap.style.display = 'block';
+    select.innerHTML = events.map((ev) => {
+      const label = ev.displayName || ev.eventKey.replace(/_/g, ' ');
+      const selected = ev.dbPath === selectedPath ? ' selected' : '';
+      return `<option value="${ev.dbPath}"${selected}>${label}</option>`;
+    }).join('');
+    select.onchange = () => {
+      const chosen = events.find((e) => e.dbPath === select.value);
+      if (chosen) loadFromFirebase(chosen.uid, chosen.eventKey, chosen.displayName);
+    };
+  }
+
+  async function discoverEvents() {
+    const rootRef = window.firebaseRef(window.firebaseDatabase, '/');
+    const snapshot = await window.firebaseGet(rootRef);
+    if (!snapshot.exists()) return [];
+
+    const rootData = snapshot.val() || {};
+    const found = [];
+
+    for (const rootKey of Object.keys(rootData)) {
+      const node = rootData[rootKey];
+      if (!node || typeof node !== 'object') continue;
+
+      if (isEventPayload(node)) {
+        found.push({
+          uid: '',
+          eventKey: rootKey,
+          dbPath: firebaseKeySanitize(rootKey),
+          displayName: getEventDisplayName(node, rootKey),
+        });
+        continue;
+      }
+
+      for (const eventKey of Object.keys(node)) {
+        const eventNode = node[eventKey];
+        if (isEventPayload(eventNode)) {
+          found.push({
+            uid: rootKey,
+            eventKey,
+            dbPath: buildEventDbPath(rootKey, eventKey),
+            displayName: getEventDisplayName(eventNode, eventKey),
+          });
+        }
+      }
+    }
+
+    return found;
+  }
+
+  async function resolveEventTarget() {
+    const qp = getQueryParams();
+    if (qp.fixture) {
+      return {
+        uid: '',
+        eventKey: qp.fixture,
+        dbPath: '',
+        displayName: qp.fixture.replace(/_/g, ' '),
+      };
+    }
+    if (qp.uid && qp.event) {
+      return {
+        uid: qp.uid,
+        eventKey: qp.event,
+        dbPath: buildEventDbPath(qp.uid, qp.event),
+        displayName: qp.event.replace(/_/g, ' '),
+      };
+    }
+    if (qp.event && !qp.uid) {
+      return {
+        uid: '',
+        eventKey: qp.event,
+        dbPath: firebaseKeySanitize(qp.event),
+        displayName: qp.event.replace(/_/g, ' '),
+      };
+    }
+
+    const all = await discoverEvents();
+    if (all.length === 0) {
+      throw new Error('Không tìm thấy giải chạy trên Firebase. Thêm ?uid=...&event=... vào URL.');
+    }
+
+    if (qp.uid && !qp.event) {
+      const forUid = all.filter(
+        (e) => e.uid === qp.uid || firebaseKeySanitize(e.uid) === firebaseKeySanitize(qp.uid)
+      );
+      if (forUid.length === 0) {
+        throw new Error('Không có giải nào cho uid đã chỉ định');
+      }
+      if (forUid.length === 1) return forUid[0];
+      renderEventPicker(forUid, forUid[0].dbPath);
+      return forUid[0];
+    }
+
+    if (all.length === 1) return all[0];
+    renderEventPicker(all, all[0].dbPath);
+    return all[0];
   }
 
   function pickField(raw, keys) {
@@ -301,9 +435,18 @@
     const manual = document.getElementById('manual-bib');
     if (manual) manual.value = bib;
 
+    if (firebaseLoadState !== 'ready') {
+      pendingBib = bib;
+      showStatus(`Đã quét BIB ${bib} — đang kết nối Firebase...`, 'info');
+      return;
+    }
+
     if (!athletesByBib.size) {
       pendingBib = bib;
-      showStatus(`Đã quét BIB ${bib} — đang tải danh sách VĐV từ Firebase...`, 'info');
+      showStatus(
+        `Đã quét BIB ${bib} — giải này chưa có VĐV trên Firebase (0 VĐV). Upload danh sách từ app iOS hoặc chọn đúng giải ở trên.`,
+        'error'
+      );
       return;
     }
 
@@ -523,7 +666,8 @@
 
   function applyEventData(data, eventKey, displayHint) {
     eventData = data;
-    const indexed = buildAthleteIndex(data.Athletes);
+    firebaseLoadState = 'ready';
+    const indexed = buildAthleteIndex(getAthletesNode(data));
     athletesByBib = indexed.byBib;
     allAthletes = indexed.list;
 
@@ -535,18 +679,18 @@
 
     const countEl = document.getElementById('athlete-count');
     if (countEl) {
-      countEl.textContent = allAthletes.length ? `${allAthletes.length} VĐV` : 'Chưa có VĐV';
+      countEl.textContent = allAthletes.length ? `${allAthletes.length} VĐV` : '0 VĐV';
     }
 
+    updateFirebasePathLabel();
+
     const resultsLink = document.getElementById('results-link');
-    if (resultsLink && activeContext.eventKey) {
+    if (resultsLink && activeContext.eventKey && !activeContext.eventKey.endsWith('.json')) {
       const params = new URLSearchParams();
       if (activeContext.uid) params.set('uid', activeContext.uid);
-      if (activeContext.eventKey && !activeContext.eventKey.endsWith('.json')) {
-        params.set('event', activeContext.eventKey);
-      }
+      params.set('event', activeContext.eventKey);
       const qs = params.toString();
-      resultsLink.href = qs ? `index.html?${qs}` : 'index.html';
+      resultsLink.href = `index.html?${qs}`;
       resultsLink.style.display = 'inline-block';
     }
 
@@ -560,7 +704,7 @@
     } else if (qp.bib) {
       lookupAndShow(qp.bib);
     } else if (!allAthletes.length) {
-      showStatus('Chưa có danh sách VĐV trên Firebase cho giải này. Kiểm tra uid/event hoặc upload từ app iOS.', 'error');
+      showStatus('Firebase đã kết nối nhưng chưa có VĐV. Upload Athletes từ app iOS hoặc chọn giải khác.', 'error');
     } else if (!cardVisible) {
       showStatus(`Đã tải ${allAthletes.length} VĐV — nhấn "Mở camera" để quét QR`, 'info');
     }
@@ -579,19 +723,29 @@
     const dbPath = buildEventDbPath(uid, eventKey);
     if (!dbPath) throw new Error('Thiếu tham số giải (event)');
 
+    detachFirebaseListener();
+    firebaseLoadState = 'loading';
     activeContext = { uid: uid || '', eventKey, dbPath };
+    updateFirebasePathLabel();
+
+    const countEl = document.getElementById('athlete-count');
+    if (countEl) countEl.textContent = 'Đang tải...';
+
     const dataRef = window.firebaseRef(window.firebaseDatabase, dbPath);
 
     return window.firebaseGet(dataRef).then((snapshot) => {
-      if (!snapshot.exists()) throw new Error('Không tìm thấy dữ liệu giải trên Firebase');
+      if (!snapshot.exists()) {
+        firebaseLoadState = 'error';
+        throw new Error(`Không tìm thấy dữ liệu tại ${dbPath}`);
+      }
       const val = snapshot.val();
-      console.log('Firebase loaded:', dbPath, 'Athletes:', val?.Athletes ? Object.keys(val.Athletes).length : 0);
+      const athleteCount = Object.keys(getAthletesNode(val)).length;
+      console.log('Firebase loaded:', dbPath, 'Athletes:', athleteCount);
       applyEventData(val, eventKey, displayHint);
 
-      window.firebaseOnValue(dataRef, (live) => {
+      firebaseValueUnsubscribe = window.firebaseOnValue(dataRef, (live) => {
         const liveVal = live.val();
         if (!liveVal) return;
-        console.log('Firebase update:', dbPath, 'Athletes:', liveVal?.Athletes ? Object.keys(liveVal.Athletes).length : 0);
         applyEventData(liveVal, eventKey, displayHint);
       });
     });
@@ -601,21 +755,16 @@
     const qp = getQueryParams();
 
     if (qp.fixture) {
+      firebaseLoadState = 'ready';
       await loadFixture(qp.fixture);
       return;
     }
 
-    if (qp.uid && qp.event) {
-      await loadFromFirebase(qp.uid, qp.event, qp.event.replace(/_/g, ' '));
-      return;
+    const target = await resolveEventTarget();
+    if (!target.dbPath) {
+      throw new Error('Không xác định được đường dẫn Firebase');
     }
-
-    if (qp.event && !qp.uid) {
-      await loadFromFirebase('', qp.event, qp.event.replace(/_/g, ' '));
-      return;
-    }
-
-    throw new Error('Thiếu tham số URL. Dùng: checkin.html?uid=...&event=... hoặc ?fixture=fixture_basic.json');
+    await loadFromFirebase(target.uid, target.eventKey, target.displayName);
   }
 
   function bindUi() {
@@ -704,14 +853,18 @@
       if (!qp.fixture) await waitFirebase();
       await resolveAndLoad();
     } catch (err) {
+      firebaseLoadState = 'error';
       showLoading(false);
-      showStatus(err.message || 'Lỗi tải dữ liệu', 'error');
+      const countEl = document.getElementById('athlete-count');
+      if (countEl) countEl.textContent = 'Lỗi tải';
+      showStatus(err.message || 'Lỗi tải dữ liệu Firebase', 'error');
       console.error(err);
     }
   }
 
   window.addEventListener('beforeunload', () => {
     stopQrScanner();
+    detachFirebaseListener();
   });
 
   window.addEventListener('DOMContentLoaded', init);

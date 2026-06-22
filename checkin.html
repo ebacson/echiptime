@@ -100,6 +100,37 @@
             background: rgba(255,255,255,0.4);
         }
 
+        .event-picker-wrap {
+            text-align: center;
+            margin-top: 10px;
+            width: 100%;
+        }
+
+        .event-picker-label {
+            display: block;
+            color: rgba(255,255,255,0.95);
+            font-size: 0.88rem;
+            margin-bottom: 6px;
+        }
+
+        .event-picker {
+            width: 100%;
+            max-width: 420px;
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 2px solid white;
+            background: rgba(255, 255, 255, 0.95);
+            font-size: 0.95rem;
+        }
+
+        #firebase-path {
+            display: block;
+            margin-top: 6px;
+            color: rgba(255,255,255,0.85);
+            font-size: 0.78rem;
+            word-break: break-all;
+        }
+
         .card {
             background: white;
             border-radius: 16px;
@@ -425,9 +456,14 @@
             <h1 id="event-title">Quét BIB VĐV</h1>
             <p class="subtitle">Quét mã QR trên email đăng ký để tra cứu thông tin vận động viên</p>
             <div class="meta-bar">
-                <span class="pill" id="athlete-count">— VĐV</span>
+                <span class="pill" id="athlete-count">Đang tải...</span>
                 <a href="index.html" id="results-link" class="pill pill-link" style="display:none;">Xem kết quả</a>
             </div>
+            <div id="event-picker-wrap" class="event-picker-wrap" style="display:none;">
+                <label class="event-picker-label" for="event-picker">Chọn giải</label>
+                <select id="event-picker" class="event-picker"></select>
+            </div>
+            <small id="firebase-path"></small>
         </header>
 
         <div id="loading">

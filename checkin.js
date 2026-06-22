@@ -13,6 +13,7 @@
   let lastScannedBib = '';
   let currentFacingMode = 'environment';
   let cameraRunning = false;
+  let nativeScanFrameId = null;
 
   function firebaseKeySanitize(s) {
     return String(s || '').replace(/[.#$\[\]\/]/g, '_');
@@ -49,6 +50,34 @@
 
   function normalizeBib(raw) {
     return String(raw || '').trim().toUpperCase();
+  }
+
+  /** Trích BIB từ nội dung QR (plain text, URL, số Excel dạng 1234.0, ...) */
+  function extractBibFromQr(raw) {
+    let text = String(raw || '').replace(/^\uFEFF/, '').trim();
+    if (!text) return '';
+
+    const firstLine = text.split(/[\r\n]+/).map((s) => s.trim()).find(Boolean) || '';
+    text = firstLine;
+
+    if (/^\d+\.0$/.test(text)) {
+      text = text.replace(/\.0$/, '');
+    }
+
+    if (/^https?:\/\//i.test(text)) {
+      try {
+        const url = new URL(text);
+        const fromQuery = url.searchParams.get('bib') || url.searchParams.get('BIB');
+        if (fromQuery) return fromQuery.trim();
+        const parts = url.pathname.split('/').filter(Boolean);
+        if (parts.length) return parts[parts.length - 1].trim();
+      } catch (_) {}
+    }
+
+    const bibInText = text.match(/\b(\d{1,5}-[A-Z])\b/i) || text.match(/\b(\d{1,5}-T)\b/i);
+    if (bibInText) return bibInText[1];
+
+    return text;
   }
 
   function formatGender(gen) {
@@ -198,11 +227,12 @@
         </div>`;
       card.classList.add('visible', 'error');
     }
-    showStatus(`Không tìm thấy BIB: ${bib}`, 'error');
+    showStatus(`Đã quét mã "${bib}" — không có trong danh sách giải`, 'error');
   }
 
   function lookupAndShow(rawBib) {
-    const bib = normalizeBib(rawBib);
+    const extracted = extractBibFromQr(rawBib);
+    const bib = normalizeBib(extracted);
     if (!bib) {
       showStatus('Mã BIB không hợp lệ', 'error');
       return;
@@ -216,7 +246,10 @@
       return;
     }
 
-    const athlete = athletesByBib.get(bib);
+    let athlete = athletesByBib.get(bib);
+    if (!athlete) {
+      athlete = allAthletes.find((a) => normalizeBib(a.bib) === bib) || null;
+    }
     if (athlete) {
       renderAthleteCard(athlete);
     } else {
@@ -225,7 +258,8 @@
   }
 
   function onQrDecoded(text) {
-    const bib = normalizeBib(text);
+    const extracted = extractBibFromQr(text);
+    const bib = normalizeBib(extracted);
     if (!bib) return;
 
     const now = Date.now();
@@ -233,24 +267,67 @@
     lastScannedBib = bib;
     lastScanAt = now;
 
+    console.log('QR decoded:', text, '→ BIB:', bib);
     lookupAndShow(bib);
 
     if (navigator.vibrate) navigator.vibrate(80);
   }
 
-  function getQrBoxSize() {
-    const max = Math.min(window.innerWidth - 64, 320);
-    const size = Math.max(180, Math.floor(max * 0.8));
-    return { width: size, height: size };
-  }
-
   function getScannerConfig() {
     return {
-      fps: 10,
-      qrbox: getQrBoxSize(),
-      aspectRatio: 1.0,
+      fps: 15,
       disableFlip: false,
+      qrbox: (viewfinderWidth, viewfinderHeight) => {
+        const w = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.9);
+        const size = Math.max(150, Math.min(w, 400));
+        return { width: size, height: size };
+      },
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true,
+      },
     };
+  }
+
+  function stopNativeBarcodeLoop() {
+    if (nativeScanFrameId) {
+      cancelAnimationFrame(nativeScanFrameId);
+      nativeScanFrameId = null;
+    }
+  }
+
+  function startNativeBarcodeLoop() {
+    stopNativeBarcodeLoop();
+    if (!('BarcodeDetector' in window)) return;
+
+    const video = document.querySelector('#qr-reader video');
+    if (!video) return;
+
+    let detector;
+    try {
+      detector = new BarcodeDetector({ formats: ['qr_code'] });
+    } catch (_) {
+      return;
+    }
+
+    let lastNativeScan = 0;
+    const scan = async () => {
+      if (!cameraRunning) return;
+      nativeScanFrameId = requestAnimationFrame(scan);
+
+      const now = Date.now();
+      if (now - lastNativeScan < 120) return;
+      if (video.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA) return;
+
+      try {
+        const codes = await detector.detect(video);
+        if (codes && codes.length > 0 && codes[0].rawValue) {
+          lastNativeScan = now;
+          onQrDecoded(codes[0].rawValue);
+        }
+      } catch (_) {}
+    };
+
+    nativeScanFrameId = requestAnimationFrame(scan);
   }
 
   function fixVideoForMobile() {
@@ -274,6 +351,7 @@
   }
 
   async function stopQrScanner() {
+    stopNativeBarcodeLoop();
     if (!qrScanner) {
       setCameraUi(false);
       return;
@@ -293,10 +371,11 @@
       { facingMode },
       config,
       onQrDecoded,
-      () => {}
+      undefined
     );
     currentFacingMode = facingMode;
     fixVideoForMobile();
+    startNativeBarcodeLoop();
   }
 
   async function startQrScanner() {
@@ -327,15 +406,16 @@
         const backCam = cameras.find((c) => /back|rear|environment/i.test(c.label));
         const cameraId = (backCam || cameras[cameras.length - 1]).id;
         const config = getScannerConfig();
-        await qrScanner.start(cameraId, config, onQrDecoded, () => {});
+        await qrScanner.start(cameraId, config, onQrDecoded, undefined);
         fixVideoForMobile();
+        startNativeBarcodeLoop();
       },
     ];
 
     for (const strategy of strategies) {
       try {
         await strategy();
-        showStatus('Đưa mã QR BIB vào khung hình', 'info');
+        showStatus('Đưa mã QR vào giữa khung hình, giữ ổn định 1–2 giây', 'info');
         return true;
       } catch (err) {
         console.warn('Camera strategy failed:', err);
@@ -519,7 +599,7 @@
         const manual = document.getElementById('manual-bib');
         if (manual) manual.value = '';
         if (cameraRunning) {
-          showStatus('Đưa mã QR BIB vào khung hình', 'info');
+          showStatus('Đưa mã QR vào giữa khung hình, giữ ổn định 1–2 giây', 'info');
         } else {
           showStatus('Nhấn "Mở camera" để quét QR', 'info');
         }

@@ -136,8 +136,12 @@
             display: block;
         }
 
-        #qr-reader img {
-            display: none;
+        .scan-hint {
+            text-align: center;
+            color: #888;
+            font-size: 0.88rem;
+            margin-top: 10px;
+            line-height: 1.45;
         }
 
         .camera-prompt {
@@ -442,6 +446,7 @@
                 </label>
             </div>
             <div id="qr-reader"></div>
+            <p class="scan-hint" id="scan-hint">Đặt mã QR ở giữa màn hình, cách 15–25 cm, tránh chói sáng.</p>
             <div id="camera-actions" class="camera-actions">
                 <button type="button" id="switch-camera-btn" class="btn btn-secondary">Đổi camera</button>
                 <button type="button" id="stop-camera-btn" class="btn btn-secondary">Tắt camera</button>

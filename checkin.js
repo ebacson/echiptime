@@ -14,6 +14,7 @@
   let currentFacingMode = 'environment';
   let cameraRunning = false;
   let nativeScanFrameId = null;
+  let pendingBib = '';
 
   function firebaseKeySanitize(s) {
     return String(s || '').replace(/[.#$\[\]\/]/g, '_');
@@ -101,20 +102,78 @@
     if (el) el.style.display = show ? 'block' : 'none';
   }
 
+  function pickField(raw, keys) {
+    for (const key of keys) {
+      if (raw[key] != null && String(raw[key]).trim() !== '') {
+        return String(raw[key]).trim();
+      }
+    }
+    return '';
+  }
+
+  function normalizeAthleteRecord(raw, firebaseKey) {
+    if (!raw || typeof raw !== 'object') return null;
+    const bib = pickField(raw, ['bib', 'BIB', 'Bib']);
+    const tagId = pickField(raw, ['tagId', 'TagID', 'tagID', 'TagId']) || firebaseKey;
+    return {
+      firebaseKey,
+      bib,
+      name: pickField(raw, ['name', 'Name', 'NAME']),
+      team: pickField(raw, ['team', 'Team', 'TEAM']),
+      gen: pickField(raw, ['gen', 'Gen', 'GEN', 'gender', 'Gender']),
+      age: pickField(raw, ['age', 'Age', 'AGE']),
+      distance: pickField(raw, ['distance', 'Distance', 'DISTANCE']),
+      tagId,
+      email: pickField(raw, ['email', 'Email', 'EMAIL']),
+      phone: pickField(raw, ['phone', 'Phone', 'PHONE']),
+      personalId: pickField(raw, ['personalId', 'PersonalId', 'personalID']),
+      uid: pickField(raw, ['uid', 'Uid', 'UID']),
+    };
+  }
+
+  function bibAliases(bib) {
+    const norm = normalizeBib(bib);
+    if (!norm) return [];
+    const aliases = new Set([norm]);
+    const noLeadingZeros = norm.replace(/^0+(\d)/, '$1');
+    if (noLeadingZeros) aliases.add(noLeadingZeros);
+    if (/^\d+\.0$/.test(norm)) aliases.add(norm.replace(/\.0$/, ''));
+    return [...aliases];
+  }
+
   function buildAthleteIndex(athletesNode) {
     const byBib = new Map();
     const list = [];
     if (!athletesNode || typeof athletesNode !== 'object') return { byBib, list };
 
-    Object.entries(athletesNode).forEach(([firebaseKey, athlete]) => {
-      if (!athlete || typeof athlete !== 'object') return;
-      const record = { ...athlete, firebaseKey };
+    Object.entries(athletesNode).forEach(([firebaseKey, raw]) => {
+      const record = normalizeAthleteRecord(raw, firebaseKey);
+      if (!record) return;
       list.push(record);
-      const bib = normalizeBib(athlete.bib);
-      if (bib) byBib.set(bib, record);
+
+      const keys = new Set();
+      bibAliases(record.bib).forEach((k) => keys.add(k));
+      bibAliases(record.tagId).forEach((k) => keys.add(k));
+      bibAliases(firebaseKey).forEach((k) => keys.add(k));
+
+      keys.forEach((key) => {
+        if (key && !byBib.has(key)) byBib.set(key, record);
+      });
     });
 
     return { byBib, list };
+  }
+
+  function findAthleteByBib(bib) {
+    const aliases = bibAliases(bib);
+    for (const key of aliases) {
+      const hit = athletesByBib.get(key);
+      if (hit) return hit;
+    }
+    return allAthletes.find((a) => {
+      const athleteAliases = bibAliases(a.bib);
+      return aliases.some((key) => athleteAliases.includes(key));
+    }) || null;
   }
 
   function getTeamPrefix(bib) {
@@ -214,6 +273,7 @@
     if (empty) empty.style.display = 'none';
 
     showStatus(`Đã tìm thấy VĐV: ${athlete.name || bib}`, 'success');
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function showNotFound(bib) {
@@ -242,14 +302,13 @@
     if (manual) manual.value = bib;
 
     if (!athletesByBib.size) {
-      showStatus('Đang tải danh sách VĐV...', 'info');
+      pendingBib = bib;
+      showStatus(`Đã quét BIB ${bib} — đang tải danh sách VĐV từ Firebase...`, 'info');
       return;
     }
 
-    let athlete = athletesByBib.get(bib);
-    if (!athlete) {
-      athlete = allAthletes.find((a) => normalizeBib(a.bib) === bib) || null;
-    }
+    pendingBib = '';
+    const athlete = findAthleteByBib(bib);
     if (athlete) {
       renderAthleteCard(athlete);
     } else {
@@ -475,7 +534,9 @@
     if (titleEl) titleEl.textContent = title;
 
     const countEl = document.getElementById('athlete-count');
-    if (countEl) countEl.textContent = `${allAthletes.length} VĐV`;
+    if (countEl) {
+      countEl.textContent = allAthletes.length ? `${allAthletes.length} VĐV` : 'Chưa có VĐV';
+    }
 
     const resultsLink = document.getElementById('results-link');
     if (resultsLink && activeContext.eventKey) {
@@ -492,8 +553,17 @@
     showLoading(false);
 
     const qp = getQueryParams();
-    if (qp.bib) lookupAndShow(qp.bib);
-    else showStatus('Nhấn "Mở camera" để quét QR', 'info');
+    const cardVisible = document.getElementById('athlete-card')?.classList.contains('visible');
+
+    if (pendingBib) {
+      lookupAndShow(pendingBib);
+    } else if (qp.bib) {
+      lookupAndShow(qp.bib);
+    } else if (!allAthletes.length) {
+      showStatus('Chưa có danh sách VĐV trên Firebase cho giải này. Kiểm tra uid/event hoặc upload từ app iOS.', 'error');
+    } else if (!cardVisible) {
+      showStatus(`Đã tải ${allAthletes.length} VĐV — nhấn "Mở camera" để quét QR`, 'info');
+    }
   }
 
   async function loadFixture(fileName) {
@@ -514,11 +584,15 @@
 
     return window.firebaseGet(dataRef).then((snapshot) => {
       if (!snapshot.exists()) throw new Error('Không tìm thấy dữ liệu giải trên Firebase');
-      applyEventData(snapshot.val(), eventKey, displayHint);
+      const val = snapshot.val();
+      console.log('Firebase loaded:', dbPath, 'Athletes:', val?.Athletes ? Object.keys(val.Athletes).length : 0);
+      applyEventData(val, eventKey, displayHint);
 
       window.firebaseOnValue(dataRef, (live) => {
-        const val = live.val();
-        if (val) applyEventData(val, eventKey, displayHint);
+        const liveVal = live.val();
+        if (!liveVal) return;
+        console.log('Firebase update:', dbPath, 'Athletes:', liveVal?.Athletes ? Object.keys(liveVal.Athletes).length : 0);
+        applyEventData(liveVal, eventKey, displayHint);
       });
     });
   }

@@ -61,8 +61,8 @@
         userBar.style.display = 'flex';
         userEmail.textContent = user.email;
       } else if (getEffectiveUid() && !loginRequired) {
-        userBar.style.display = 'flex';
-        userEmail.textContent = `UID: ${getEffectiveUid().slice(0, 8)}...`;
+        userBar.style.display = 'none';
+        userEmail.textContent = '';
       } else {
         userBar.style.display = 'none';
         userEmail.textContent = '';
@@ -123,7 +123,7 @@
       showLoading(false);
       const countEl = document.getElementById('athlete-count');
       if (countEl) countEl.textContent = 'Lỗi tải';
-      showStatus(err.message || 'Lỗi tải dữ liệu Firebase', 'error');
+      showStatus(err.message || 'Lỗi tải dữ liệu', 'error');
       console.error(err);
     }
   }
@@ -239,15 +239,7 @@
   }
 
   function updateFirebasePathLabel() {
-    const el = document.getElementById('firebase-path');
-    if (!el) return;
-    const uid = getEffectiveUid();
-    if (activeContext.dbPath) {
-      const uidHint = uid ? ` | UID: ${uid.slice(0, 8)}...` : '';
-      el.textContent = `Firebase: ${activeContext.dbPath}${uidHint}`;
-    } else {
-      el.textContent = uid ? `UID: ${uid}` : '';
-    }
+    /* path không hiển thị cho người dùng */
   }
 
   function renderEventPicker(events, selectedPath) {
@@ -339,7 +331,7 @@
 
     const all = await discoverEvents();
     if (all.length === 0) {
-      throw new Error('Không tìm thấy giải chạy trên Firebase. Đăng nhập hoặc thêm ?event=... vào URL.');
+      throw new Error('Không tìm thấy giải chạy. Đăng nhập hoặc thêm ?event=... vào URL.');
     }
 
     if (effectiveUid && !qp.event) {
@@ -560,14 +552,14 @@
 
     if (firebaseLoadState !== 'ready') {
       pendingBib = bib;
-      showStatus(`Đã quét BIB ${bib} — đang kết nối Firebase...`, 'info');
+      showStatus(`Đã quét BIB ${bib} — đang tải danh sách VĐV...`, 'info');
       return;
     }
 
     if (!athletesByBib.size) {
       pendingBib = bib;
       showStatus(
-        `Đã quét BIB ${bib} — giải này chưa có VĐV trên Firebase (0 VĐV). Upload danh sách từ app iOS hoặc chọn đúng giải ở trên.`,
+        `Đã quét BIB ${bib} — giải này chưa có VĐV (0 VĐV). Upload danh sách từ app iOS hoặc chọn đúng giải ở trên.`,
         'error'
       );
       return;
@@ -827,7 +819,7 @@
     } else if (qp.bib) {
       lookupAndShow(qp.bib);
     } else if (!allAthletes.length) {
-      showStatus('Firebase đã kết nối nhưng chưa có VĐV. Upload Athletes từ app iOS hoặc chọn giải khác.', 'error');
+      showStatus('Chưa có VĐV cho giải này. Upload Athletes từ app iOS hoặc chọn giải khác.', 'error');
     } else if (!cardVisible) {
       showStatus(`Đã tải ${allAthletes.length} VĐV — nhấn "Mở camera" để quét QR`, 'info');
     }
@@ -859,7 +851,7 @@
     return window.firebaseGet(dataRef).then((snapshot) => {
       if (!snapshot.exists()) {
         firebaseLoadState = 'error';
-        throw new Error(`Không tìm thấy dữ liệu tại ${dbPath}`);
+        throw new Error('Không tìm thấy dữ liệu giải. Kiểm tra tên giải hoặc đăng nhập đúng tài khoản.');
       }
       const val = snapshot.val();
       const athleteCount = Object.keys(getAthletesNode(val)).length;
@@ -885,7 +877,7 @@
 
     const target = await resolveEventTarget();
     if (!target.dbPath) {
-      throw new Error('Không xác định được đường dẫn Firebase');
+      throw new Error('Không xác định được dữ liệu giải');
     }
     await loadFromFirebase(target.uid, target.eventKey, target.displayName);
   }
@@ -971,7 +963,7 @@
           btn.textContent = 'Đang đăng nhập...';
         }
         try {
-          if (!window.firebaseSignIn) throw new Error('Firebase Auth chưa sẵn sàng');
+          if (!window.firebaseSignIn) throw new Error('Chức năng đăng nhập chưa sẵn sàng');
           await window.firebaseSignIn(email, password);
         } catch (err) {
           showAuthError(authErrorMessage(err));
@@ -1017,7 +1009,7 @@
           resolve();
         } else if (tries > 50) {
           clearInterval(t);
-          reject(new Error('Không thể kết nối Firebase'));
+          reject(new Error('Không thể kết nối máy chủ'));
         }
       }, 100);
     });
@@ -1038,7 +1030,7 @@
       showLoading(false);
       const countEl = document.getElementById('athlete-count');
       if (countEl) countEl.textContent = 'Lỗi tải';
-      showStatus(err.message || 'Lỗi tải dữ liệu Firebase', 'error');
+      showStatus(err.message || 'Lỗi tải dữ liệu', 'error');
       console.error(err);
     }
   }

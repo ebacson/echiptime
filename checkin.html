@@ -145,14 +145,6 @@
             font-size: 0.95rem;
         }
 
-        #firebase-path {
-            display: block;
-            margin-top: 6px;
-            color: rgba(255,255,255,0.85);
-            font-size: 0.78rem;
-            word-break: break-all;
-        }
-
         .auth-card h2 {
             font-size: 1.1rem;
             color: #ff66b3;
@@ -552,7 +544,6 @@
                 <label class="event-picker-label" for="event-picker">Chọn giải</label>
                 <select id="event-picker" class="event-picker"></select>
             </div>
-            <small id="firebase-path"></small>
             <div id="user-bar" class="user-bar" style="display:none;">
                 <span class="user-email" id="user-email"></span>
                 <button type="button" id="logout-btn" class="btn-logout">Đăng xuất</button>
@@ -561,7 +552,7 @@
 
         <section id="auth-panel" class="card auth-card" style="display:none;">
             <h2>Đăng nhập BTC</h2>
-            <p>Dùng tài khoản eChipTime (cùng email/mật khẩu trên app iOS). Sau đăng nhập, hệ thống tự lấy UID Firebase của bạn.</p>
+            <p>Dùng tài khoản eChipTime (cùng email/mật khẩu trên app iOS). Sau đăng nhập, hệ thống tự tải giải của bạn.</p>
             <form id="login-form" class="auth-form">
                 <input type="email" id="login-email" placeholder="Email" autocomplete="username" required>
                 <input type="password" id="login-password" placeholder="Mật khẩu" autocomplete="current-password" required>

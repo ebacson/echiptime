@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quét BIB VĐV</title>
+    <link rel="icon" type="image/x-icon" href="echiptime.ico">
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, get, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAiCvMlAAC3q87a7MEFLl3XDv0pkdkK93o",
+            authDomain: "realtime-echiptime.firebaseapp.com",
+            databaseURL: "https://realtime-echiptime-default-rtdb.firebaseio.com",
+            projectId: "realtime-echiptime",
+            storageBucket: "realtime-echiptime.firebasestorage.app",
+            messagingSenderId: "69244922788",
+            appId: "1:69244922788:web:c0a97507e0addad6286f31",
+            measurementId: "G-ECTTVR1X75"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        window.firebaseDatabase = database;
+        window.firebaseRef = ref;
+        window.firebaseGet = get;
+        window.firebaseOnValue = onValue;
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #ffcce6 0%, #ffb3d9 100%);
+            min-height: 100vh;
+            padding: 12px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 720px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .header-logo {
+            max-width: 220px;
+            width: 100%;
+            height: auto;
+            margin: 0 auto 12px;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25));
+        }
+
+        h1 {
+            color: white;
+            font-size: 1.6rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.25);
+            margin-bottom: 6px;
+        }
+
+        .subtitle {
+            color: rgba(255,255,255,0.95);
+            font-size: 0.95rem;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        }
+
+        .meta-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: rgba(255,255,255,0.25);
+            border: 2px solid white;
+            color: white;
+            font-size: 0.88rem;
+            font-weight: 600;
+        }
+
+        .pill-link {
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .pill-link:hover {
+            background: rgba(255,255,255,0.4);
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .scanner-card h2 {
+            font-size: 1.1rem;
+            color: #ff66b3;
+            margin-bottom: 12px;
+        }
+
+        #qr-reader {
+            width: 100%;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        #qr-reader video {
+            border-radius: 12px;
+        }
+
+        .manual-form {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .manual-form input {
+            flex: 1;
+            padding: 12px 14px;
+            border: 2px solid #ffd6eb;
+            border-radius: 12px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        .manual-form input:focus {
+            border-color: #ff66b3;
+        }
+
+        .btn {
+            padding: 12px 18px;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.15s, box-shadow 0.15s;
+        }
+
+        .btn:active { transform: scale(0.98); }
+
+        .btn-primary {
+            background: #ff66b3;
+            color: white;
+            box-shadow: 0 4px 12px rgba(255,102,179,0.35);
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #555;
+            margin-top: 12px;
+            width: 100%;
+        }
+
+        .status-message {
+            margin-top: 12px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 0.92rem;
+            display: none;
+        }
+
+        .status-message.info {
+            background: #eef6ff;
+            color: #1a5fb4;
+            border: 1px solid #c5dfff;
+        }
+
+        .status-message.success {
+            background: #e8f8ef;
+            color: #1e7e45;
+            border: 1px solid #b8e6c8;
+        }
+
+        .status-message.error {
+            background: #fff0f0;
+            color: #c0392b;
+            border: 1px solid #f5c6c6;
+        }
+
+        #loading {
+            text-align: center;
+            padding: 24px;
+            color: white;
+            font-weight: 600;
+        }
+
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 4px solid rgba(255,255,255,0.35);
+            border-top-color: white;
+            border-radius: 50%;
+            margin: 0 auto 12px;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #empty-state {
+            text-align: center;
+            padding: 28px 16px;
+            color: #999;
+        }
+
+        #empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 8px;
+            opacity: 0.5;
+        }
+
+        #athlete-card {
+            display: none;
+        }
+
+        #athlete-card.visible {
+            display: block;
+        }
+
+        .bib-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #ff66b3, #ff99cc);
+            color: white;
+            font-size: 1.8rem;
+            font-weight: 800;
+            padding: 10px 24px;
+            border-radius: 14px;
+            margin-bottom: 12px;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 14px rgba(255,102,179,0.4);
+        }
+
+        .athlete-name {
+            font-size: 1.5rem;
+            color: #222;
+            margin-bottom: 18px;
+            line-height: 1.3;
+        }
+
+        .info-grid {
+            display: grid;
+            gap: 0;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .info-row:last-child { border-bottom: none; }
+
+        .info-label {
+            color: #888;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+            min-width: 110px;
+        }
+
+        .field-value {
+            font-weight: 600;
+            color: #222;
+            text-align: right;
+            word-break: break-word;
+        }
+
+        .field-link {
+            font-weight: 600;
+            color: #ff66b3;
+            text-decoration: none;
+            text-align: right;
+            word-break: break-all;
+        }
+
+        .team-members {
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 2px dashed #ffd6eb;
+        }
+
+        .team-members h3 {
+            font-size: 1rem;
+            color: #ff66b3;
+            margin-bottom: 10px;
+        }
+
+        .team-members ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .team-members li {
+            padding: 10px 12px;
+            background: #fff5fa;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        .member-meta {
+            color: #888;
+            font-size: 0.85rem;
+        }
+
+        .team-members.empty p {
+            color: #999;
+            font-size: 0.92rem;
+        }
+
+        .not-found {
+            text-align: center;
+            padding: 20px 10px;
+        }
+
+        .not-found-icon {
+            width: 64px;
+            height: 64px;
+            line-height: 64px;
+            border-radius: 50%;
+            background: #fff0f0;
+            color: #e74c3c;
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 0 auto 14px;
+        }
+
+        #athlete-card.error .bib-badge {
+            background: linear-gradient(135deg, #e74c3c, #ff8a80);
+        }
+
+        @media (max-width: 480px) {
+            h1 { font-size: 1.35rem; }
+            .bib-badge { font-size: 1.5rem; }
+            .manual-form { flex-direction: column; }
+            .info-row { flex-direction: column; gap: 4px; }
+            .field-value, .field-link { text-align: left; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <img src="echiptime_logo.png" alt="eChipTime" class="header-logo" onerror="this.style.display='none'">
+            <h1 id="event-title">Quét BIB VĐV</h1>
+            <p class="subtitle">Quét mã QR trên email đăng ký để tra cứu thông tin vận động viên</p>
+            <div class="meta-bar">
+                <span class="pill" id="athlete-count">— VĐV</span>
+                <a href="index.html" id="results-link" class="pill pill-link" style="display:none;">Xem kết quả</a>
+            </div>
+        </header>
+
+        <div id="loading">
+            <div class="spinner"></div>
+            Đang tải danh sách vận động viên...
+        </div>
+
+        <section class="card scanner-card">
+            <h2>Quét mã QR</h2>
+            <div id="qr-reader"></div>
+            <form id="manual-form" class="manual-form">
+                <input type="text" id="manual-bib" placeholder="Hoặc nhập BIB thủ công (vd: 3553-A)" autocomplete="off" autocapitalize="characters">
+                <button type="submit" class="btn btn-primary">Tra cứu</button>
+            </form>
+            <div id="status-message" class="status-message"></div>
+        </section>
+
+        <section class="card">
+            <div id="empty-state">
+                <div class="icon">📋</div>
+                <p>Chưa quét mã nào.<br>Đưa mã QR BIB vào khung camera hoặc nhập BIB ở trên.</p>
+            </div>
+            <div id="athlete-card"></div>
+            <button type="button" id="rescan-btn" class="btn btn-secondary">Quét VĐV khác</button>
+        </section>
+    </div>
+
+    <script src="checkin.js"></script>
+</body>
+</html>

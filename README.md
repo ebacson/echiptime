@@ -36,11 +36,24 @@ Trang web hiển thị kết quả giải chạy đồng bộ từ **Firebase Re
     START|CP1|...|FINISH/{tagId}/lines/{md5}: "CP#time#rssi#ant"
 ```
 
+## Check-in VĐV (QR)
+
+Trang `checkin.html` dùng camera quét mã QR (mã BIB gửi qua email) và hiển thị đầy đủ thông tin vận động viên từ Firebase `Athletes/`.
+
+- Một giải: `checkin.html?uid=FIREBASE_AUTH_UID&event=TEN_GIAI`
+- Test local: `checkin.html?fixture=fixture_basic.json`
+- Tra cứu trực tiếp: `checkin.html?uid=...&event=...&bib=3553-A`
+
+Có ô nhập BIB thủ công khi không dùng được camera. Với BIB đội Ekiden (`*-T`), trang hiển thị thêm danh sách thành viên.
+
 ## File chính
 
 ```
 Web/
 ├── index.html
+├── checkin.html
+├── checkin.js
+├── app.js
 ├── echiptime_logo.png
 └── README.md
 ```

@@ -10,8 +10,11 @@
     "cp2_distance": "10.0KM"
   },
   "Athletes": {
-    "TAG001": { "bib": "001", "name": "Runner One", "gen": "M", "age": "A", "distance": "14.4KM" },
-    "TAG002": { "bib": "002", "name": "Runner Two", "gen": "F", "age": "A", "distance": "14.4KM" }
+    "TAG001": { "bib": "001", "name": "Runner One", "gen": "M", "age": "A", "distance": "14.4KM", "tagId": "TAG001", "email": "runner1@example.com", "phone": "0901234567" },
+    "TAG002": { "bib": "002", "name": "Runner Two", "gen": "F", "age": "A", "distance": "14.4KM", "tagId": "TAG002", "email": "runner2@example.com", "phone": "0909876543" },
+    "TAGT01": { "bib": "3553-T", "name": "Team Lightning", "gen": "Team", "age": "Team", "distance": "14.4KM", "tagId": "TAGT01", "email": "team@example.com" },
+    "TAGA01": { "bib": "3553-A", "name": "Member Alpha", "gen": "M", "age": "A", "distance": "3.6KM", "tagId": "TAGA01" },
+    "TAGB01": { "bib": "3553-B", "name": "Member Beta", "gen": "F", "age": "A", "distance": "3.6KM", "tagId": "TAGB01" }
   },
   "START": {
     "TAG001": { "lines": { "a": "START#2026-01-19 07:00:05:000#70#1" } },

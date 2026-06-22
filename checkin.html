@@ -2,7 +2,8 @@
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Quét BIB VĐV</title>
     <link rel="icon" type="image/x-icon" href="echiptime.ico">
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
@@ -115,12 +116,70 @@
 
         #qr-reader {
             width: 100%;
+            min-height: 260px;
             border-radius: 12px;
             overflow: hidden;
+            display: none;
+            background: #111;
+        }
+
+        #qr-reader.active {
+            display: block;
         }
 
         #qr-reader video {
+            width: 100% !important;
+            height: auto !important;
+            max-height: 70vh;
+            object-fit: cover;
             border-radius: 12px;
+            display: block;
+        }
+
+        #qr-reader img {
+            display: none;
+        }
+
+        .camera-prompt {
+            text-align: center;
+            padding: 8px 0 4px;
+        }
+
+        .camera-prompt p {
+            color: #666;
+            font-size: 0.92rem;
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+
+        .btn-block {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .file-label {
+            display: block;
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .file-label input {
+            display: none;
+        }
+
+        .camera-actions {
+            display: none;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .camera-actions.active {
+            display: flex;
+        }
+
+        .camera-actions .btn {
+            flex: 1;
+            margin-top: 0;
         }
 
         .manual-form {
@@ -374,7 +433,19 @@
 
         <section class="card scanner-card">
             <h2>Quét mã QR</h2>
+            <div id="camera-prompt" class="camera-prompt">
+                <p>Nhấn <strong>Mở camera</strong> để bật quét QR.<br>Trình duyệt (đặc biệt iPhone) chỉ cho phép camera sau khi bạn chạm nút.</p>
+                <button type="button" id="start-camera-btn" class="btn btn-primary btn-block">Mở camera</button>
+                <label class="btn btn-secondary btn-block file-label">
+                    Chụp / chọn ảnh QR
+                    <input type="file" id="qr-file-input" accept="image/*" capture="environment">
+                </label>
+            </div>
             <div id="qr-reader"></div>
+            <div id="camera-actions" class="camera-actions">
+                <button type="button" id="switch-camera-btn" class="btn btn-secondary">Đổi camera</button>
+                <button type="button" id="stop-camera-btn" class="btn btn-secondary">Tắt camera</button>
+            </div>
             <form id="manual-form" class="manual-form">
                 <input type="text" id="manual-bib" placeholder="Hoặc nhập BIB thủ công (vd: 3553-A)" autocomplete="off" autocapitalize="characters">
                 <button type="submit" class="btn btn-primary">Tra cứu</button>

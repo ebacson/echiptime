@@ -11,6 +11,8 @@
   let qrScanner = null;
   let lastScanAt = 0;
   let lastScannedBib = '';
+  let currentFacingMode = 'environment';
+  let cameraRunning = false;
 
   function firebaseKeySanitize(s) {
     return String(s || '').replace(/[.#$\[\]\/]/g, '_');
@@ -236,53 +238,148 @@
     if (navigator.vibrate) navigator.vibrate(80);
   }
 
-  async function startQrScanner() {
-    if (!window.Html5Qrcode) {
-      showStatus('Thư viện quét QR chưa tải xong', 'error');
-      return;
-    }
+  function getQrBoxSize() {
+    const max = Math.min(window.innerWidth - 64, 320);
+    const size = Math.max(180, Math.floor(max * 0.8));
+    return { width: size, height: size };
+  }
 
-    const readerId = 'qr-reader';
-    if (qrScanner) {
-      try {
-        const state = qrScanner.getState();
-        if (state === 2) return;
-        await qrScanner.stop();
-      } catch (_) {}
-    }
+  function getScannerConfig() {
+    return {
+      fps: 10,
+      qrbox: getQrBoxSize(),
+      aspectRatio: 1.0,
+      disableFlip: false,
+    };
+  }
 
-    qrScanner = new Html5Qrcode(readerId);
+  function fixVideoForMobile() {
+    document.querySelectorAll('#qr-reader video').forEach((video) => {
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('webkit-playsinline', 'true');
+      video.muted = true;
+      video.style.objectFit = 'cover';
+      video.style.width = '100%';
+    });
+  }
 
-    const config = { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1 };
-    const cameras = await Html5Qrcode.getCameras();
-    if (!cameras || !cameras.length) {
-      showStatus('Không tìm thấy camera. Dùng ô nhập BIB thủ công.', 'error');
-      return;
-    }
-
-    const backCam = cameras.find((c) => /back|rear|environment/i.test(c.label));
-    const cameraId = (backCam || cameras[cameras.length - 1]).id;
-
-    try {
-      await qrScanner.start(
-        cameraId,
-        config,
-        onQrDecoded,
-        () => {}
-      );
-      showStatus('Đưa mã QR BIB vào khung hình', 'info');
-    } catch (err) {
-      console.error('QR scanner error:', err);
-      showStatus('Không mở được camera. Hãy cấp quyền hoặc nhập BIB thủ công.', 'error');
-    }
+  function setCameraUi(running) {
+    cameraRunning = running;
+    const prompt = document.getElementById('camera-prompt');
+    const reader = document.getElementById('qr-reader');
+    const actions = document.getElementById('camera-actions');
+    if (prompt) prompt.style.display = running ? 'none' : 'block';
+    if (reader) reader.classList.toggle('active', running);
+    if (actions) actions.classList.toggle('active', running);
   }
 
   async function stopQrScanner() {
-    if (!qrScanner) return;
+    if (!qrScanner) {
+      setCameraUi(false);
+      return;
+    }
     try {
       const state = qrScanner.getState();
       if (state === 2) await qrScanner.stop();
     } catch (_) {}
+    setCameraUi(false);
+  }
+
+  async function tryStartCamera(facingMode) {
+    const readerId = 'qr-reader';
+    if (!qrScanner) qrScanner = new Html5Qrcode(readerId);
+    const config = getScannerConfig();
+    await qrScanner.start(
+      { facingMode },
+      config,
+      onQrDecoded,
+      () => {}
+    );
+    currentFacingMode = facingMode;
+    fixVideoForMobile();
+  }
+
+  async function startQrScanner() {
+    if (!window.Html5Qrcode) {
+      showStatus('Thư viện quét QR chưa tải xong', 'error');
+      return false;
+    }
+
+    if (!window.isSecureContext) {
+      showStatus('Camera cần HTTPS. Mở trang qua https:// hoặc localhost.', 'error');
+      return false;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showStatus('Trình duyệt không hỗ trợ camera. Dùng "Chụp ảnh QR" hoặc nhập BIB.', 'error');
+      return false;
+    }
+
+    await stopQrScanner();
+    setCameraUi(true);
+
+    const strategies = [
+      () => tryStartCamera('environment'),
+      () => tryStartCamera('user'),
+      async () => {
+        const cameras = await Html5Qrcode.getCameras();
+        if (!cameras || !cameras.length) throw new Error('Không có camera');
+        const backCam = cameras.find((c) => /back|rear|environment/i.test(c.label));
+        const cameraId = (backCam || cameras[cameras.length - 1]).id;
+        const config = getScannerConfig();
+        await qrScanner.start(cameraId, config, onQrDecoded, () => {});
+        fixVideoForMobile();
+      },
+    ];
+
+    for (const strategy of strategies) {
+      try {
+        await strategy();
+        showStatus('Đưa mã QR BIB vào khung hình', 'info');
+        return true;
+      } catch (err) {
+        console.warn('Camera strategy failed:', err);
+        try {
+          const state = qrScanner.getState();
+          if (state === 2) await qrScanner.stop();
+        } catch (_) {}
+      }
+    }
+
+    setCameraUi(false);
+    const msg = 'Không mở được camera. Hãy cấp quyền Camera trong Cài đặt trình duyệt, hoặc dùng "Chụp ảnh QR".';
+    showStatus(msg, 'error');
+    return false;
+  }
+
+  async function switchCamera() {
+    if (!cameraRunning) return;
+    const next = currentFacingMode === 'environment' ? 'user' : 'environment';
+    await stopQrScanner();
+    setCameraUi(true);
+    try {
+      await tryStartCamera(next);
+      showStatus(`Đã chuyển sang camera ${next === 'environment' ? 'sau' : 'trước'}`, 'info');
+    } catch (err) {
+      console.error('Switch camera error:', err);
+      setCameraUi(false);
+      showStatus('Không đổi được camera. Thử "Mở camera" lại.', 'error');
+    }
+  }
+
+  async function scanFromFile(file) {
+    if (!file || !window.Html5Qrcode) return;
+    const readerId = 'qr-reader';
+    await stopQrScanner();
+    if (!qrScanner) qrScanner = new Html5Qrcode(readerId);
+    try {
+      const text = await qrScanner.scanFile(file, true);
+      onQrDecoded(text);
+      showStatus('Đã đọc QR từ ảnh', 'success');
+    } catch (err) {
+      console.error('scanFile error:', err);
+      showStatus('Không đọc được mã QR trong ảnh. Thử chụp lại hoặc nhập BIB.', 'error');
+    }
   }
 
   function applyEventData(data, eventKey, displayHint) {
@@ -316,7 +413,7 @@
 
     const qp = getQueryParams();
     if (qp.bib) lookupAndShow(qp.bib);
-    else showStatus(`Sẵn sàng quét — ${allAthletes.length} VĐV`, 'info');
+    else showStatus('Nhấn "Mở camera" để quét QR', 'info');
   }
 
   async function loadFixture(fileName) {
@@ -377,6 +474,37 @@
       });
     }
 
+    const startBtn = document.getElementById('start-camera-btn');
+    if (startBtn) {
+      startBtn.addEventListener('click', () => {
+        startQrScanner();
+      });
+    }
+
+    const stopBtn = document.getElementById('stop-camera-btn');
+    if (stopBtn) {
+      stopBtn.addEventListener('click', () => {
+        stopQrScanner();
+        showStatus('Camera đã tắt. Nhấn "Mở camera" để quét tiếp.', 'info');
+      });
+    }
+
+    const switchBtn = document.getElementById('switch-camera-btn');
+    if (switchBtn) {
+      switchBtn.addEventListener('click', () => {
+        switchCamera();
+      });
+    }
+
+    const fileInput = document.getElementById('qr-file-input');
+    if (fileInput) {
+      fileInput.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) scanFromFile(file);
+        e.target.value = '';
+      });
+    }
+
     const rescanBtn = document.getElementById('rescan-btn');
     if (rescanBtn) {
       rescanBtn.addEventListener('click', () => {
@@ -390,7 +518,11 @@
         if (empty) empty.style.display = 'block';
         const manual = document.getElementById('manual-bib');
         if (manual) manual.value = '';
-        showStatus('Đưa mã QR BIB vào khung hình', 'info');
+        if (cameraRunning) {
+          showStatus('Đưa mã QR BIB vào khung hình', 'info');
+        } else {
+          showStatus('Nhấn "Mở camera" để quét QR', 'info');
+        }
       });
     }
   }
@@ -417,7 +549,6 @@
       const qp = getQueryParams();
       if (!qp.fixture) await waitFirebase();
       await resolveAndLoad();
-      await startQrScanner();
     } catch (err) {
       showLoading(false);
       showStatus(err.message || 'Lỗi tải dữ liệu', 'error');

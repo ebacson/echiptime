@@ -653,7 +653,7 @@
     } else if (!document.getElementById('athlete-card')?.classList.contains('visible')) {
       const usbHint = window.UhfUsbReader && UhfUsbReader.isSupported()
         ? 'Kết nối đầu đọc USB và đưa tag BIB vào vùng đọc'
-        : 'Nhập Tag ID thủ công (WebUSB cần Chrome/Edge trên máy tính)';
+        : 'Nhập Tag ID thủ công (cần Chrome/Edge trên máy tính)';
       showStatus(`Đã tải ${allAthletes.length} VĐV — ${usbHint}`, 'info');
     }
   }
@@ -719,7 +719,7 @@
       return;
     }
     if (!UhfUsbReader.isSupported()) {
-      showStatus('WebUSB không khả dụng. Dùng Chrome/Edge trên máy tính hoặc nhập Tag ID thủ công.', 'error');
+      showStatus('Trình duyệt không hỗ trợ WebHID/WebUSB. Dùng Chrome/Edge trên máy tính hoặc nhập Tag ID thủ công.', 'error');
       return;
     }
 
@@ -812,13 +812,13 @@
       });
     }
 
-    if (navigator.usb) {
-      navigator.usb.addEventListener('disconnect', (e) => {
-        if (usbReader && usbReader.device === e.device) {
-          disconnectUsbReader();
-        }
-      });
-    }
+    const onDeviceDisconnect = (e) => {
+      if (usbReader && usbReader.device === e.device) {
+        disconnectUsbReader();
+      }
+    };
+    if (navigator.usb) navigator.usb.addEventListener('disconnect', onDeviceDisconnect);
+    if (navigator.hid) navigator.hid.addEventListener('disconnect', onDeviceDisconnect);
   }
 
   async function init() {
@@ -827,7 +827,7 @@
     updateMetaCounts();
     updateUsbButtons();
     setReaderStatus(
-      window.UhfUsbReader && UhfUsbReader.isSupported() ? 'Chưa kết nối' : 'WebUSB không hỗ trợ trên thiết bị này',
+      window.UhfUsbReader && UhfUsbReader.isSupported() ? 'Chưa kết nối' : 'Trình duyệt không hỗ trợ đọc USB',
       'idle'
     );
     showLoading(true);

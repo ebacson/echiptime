@@ -1,6 +1,6 @@
 /**
- * UHF RFID USB reader — WebUSB port of WriteTag (SW_SDK_V4.0 protocol).
- * Device: VID 0x1A86 (6790), PID 0xE010 (57360)
+ * UHF RFID USB reader — WebHID (ưu tiên) + WebUSB fallback.
+ * Port protocol WriteTag / SW_SDK_V4.0 — VID 0x1A86, PID 0xE010
  */
 (function (global) {
   'use strict';
@@ -50,7 +50,7 @@
     return out;
   }
 
-  function padToOutPacketSize(frame, packetSize) {
+  function padToPacketSize(frame, packetSize) {
     const pkt = packetSize > 0 ? packetSize : 64;
     if (!frame || frame.length >= pkt) return frame;
     const out = new Uint8Array(pkt);
@@ -74,11 +74,33 @@
     return hex || null;
   }
 
+  function parseTagFromBuffer(raw) {
+    if (!raw || !raw.length) return null;
+    const attempts = [raw];
+    if (raw[0] === 0x00 && raw.length > 1) attempts.push(raw.subarray(1));
+    if (raw.length > 2 && raw[0] === 0x00) attempts.push(raw.subarray(2));
+    for (const buf of attempts) {
+      const tag = extractTagHexFromCt45(buf);
+      if (tag) return tag;
+    }
+    return null;
+  }
+
   function detectFramingFromIn(buf) {
     if (!buf || buf.length < 3) return null;
     if (buf[1] === 0x43 && buf[2] === 0x54) return 'LENGTH_PREFIX_TOTAL';
     if (buf[0] === 0x00 && buf[1] === 0x43 && buf[2] === 0x54) return 'REPORT_ID_WITH_LEN';
     return null;
+  }
+
+  function hidReportPayload(frame) {
+    if (!frame || !frame.length) return new Uint8Array(0);
+    if (frame[0] === 0x00) return frame.subarray(1);
+    return frame;
+  }
+
+  function hidReportId(frame) {
+    return (frame && frame.length) ? (frame[0] & 0xFF) : 0;
   }
 
   class UhfUsbReader {
@@ -87,48 +109,112 @@
       this.onStatus = (options && options.onStatus) || (() => {});
       this.onError = (options && options.onError) || (() => {});
       this.device = null;
+      this.transport = null; // 'hid' | 'usb'
       this.interfaceNumber = null;
       this.epIn = null;
       this.epOut = null;
       this.outPacketSize = 64;
-      this.outFraming = 'LENGTH_PREFIX_TOTAL';
+      this.outFraming = 'REPORT_ID_WITH_LEN';
       this.polling = false;
       this.pollTimer = null;
+      this.inputHandler = null;
       this.lastEmittedTag = '';
       this.lastEmittedAt = 0;
       this.tagDebounceMs = (options && options.tagDebounceMs) || 1500;
       this.beepEnabled = options && options.beepEnabled !== false;
     }
 
-    static isSupported() {
+    static isHidSupported() {
+      return typeof navigator !== 'undefined' && !!navigator.hid;
+    }
+
+    static isUsbSupported() {
       return typeof navigator !== 'undefined' && !!navigator.usb;
     }
 
+    static isSupported() {
+      return UhfUsbReader.isHidSupported() || UhfUsbReader.isUsbSupported();
+    }
+
+    static preferredTransport() {
+      return UhfUsbReader.isHidSupported() ? 'hid' : 'usb';
+    }
+
     get connected() {
-      return !!(this.device && this.device.opened);
+      if (!this.device) return false;
+      if (this.transport === 'hid') return this.device.opened;
+      return !!this.device.opened;
     }
 
     async connect() {
       if (!UhfUsbReader.isSupported()) {
-        throw new Error('Trình duyệt không hỗ trợ WebUSB. Dùng Chrome hoặc Edge trên máy tính.');
+        throw new Error('Trình duyệt không hỗ trợ WebHID/WebUSB. Dùng Chrome hoặc Edge trên máy tính.');
       }
       if (!window.isSecureContext) {
-        throw new Error('WebUSB cần HTTPS hoặc localhost.');
+        throw new Error('Cần HTTPS hoặc localhost.');
       }
 
-      this.onStatus('Chọn đầu đọc USB...');
+      if (UhfUsbReader.isHidSupported()) {
+        try {
+          await this.connectHid();
+          return this.device;
+        } catch (err) {
+          if (err && err.name === 'NotFoundError') throw err;
+          console.warn('WebHID failed, trying WebUSB:', err);
+          if (!UhfUsbReader.isUsbSupported()) throw err;
+        }
+      }
+
+      await this.connectUsb();
+      return this.device;
+    }
+
+    async connectHid() {
+      this.onStatus('Chọn đầu đọc USB (WebHID)...');
+      const [device] = await navigator.hid.requestDevice({
+        filters: [{ vendorId: VENDOR_ID, productId: PRODUCT_ID }],
+      });
+      if (!device) throw new DOMException('Không chọn thiết bị', 'NotFoundError');
+      await this.openHidDevice(device);
+      this.onStatus('Đã kết nối (WebHID) — đưa tag BIB vào vùng đọc');
+    }
+
+    async connectUsb() {
+      this.onStatus('Chọn đầu đọc USB (WebUSB)...');
       const device = await navigator.usb.requestDevice({
         filters: [{ vendorId: VENDOR_ID, productId: PRODUCT_ID }],
       });
-
-      await this.openDevice(device);
-      this.onStatus('Đã kết nối — đưa tag BIB vào vùng đọc');
-      return device;
+      await this.openUsbDevice(device);
+      this.onStatus('Đã kết nối (WebUSB) — đưa tag BIB vào vùng đọc');
     }
 
-    async openDevice(device) {
+    async openHidDevice(device) {
       await this.disconnect();
       this.device = device;
+      this.transport = 'hid';
+      this.outFraming = 'REPORT_ID_WITH_LEN';
+
+      if (!device.opened) await device.open();
+
+      this.inputHandler = (event) => {
+        const buf = new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
+        const framing = detectFramingFromIn(buf);
+        if (framing) this.outFraming = framing;
+        const tag = parseTagFromBuffer(buf);
+        if (tag) this.emitTag(tag);
+      };
+      device.addEventListener('inputreport', this.inputHandler);
+
+      await this.sendHidFeatureInit();
+      await this.sendSetDeviceOneParam(PARAM_WORK_MODE, WORKMODE_ACTIVE);
+      await this.sendSetDeviceOneParam(PARAM_SCAN_AREA, SCANAREA_EPC);
+      await this.sendSetDeviceOneParam(PARAM_BEEP_ENABLE, this.beepEnabled ? 0x01 : 0x00);
+    }
+
+    async openUsbDevice(device) {
+      await this.disconnect();
+      this.device = device;
+      this.transport = 'usb';
       await device.open();
 
       if (!device.configuration) {
@@ -146,12 +232,12 @@
       this.outPacketSize = found.outPacketSize;
 
       await device.claimInterface(this.interfaceNumber);
-      await this.sendHidFeatureInit();
+      await this.sendUsbHidFeatureInit();
       await this.sendSetDeviceOneParam(PARAM_WORK_MODE, WORKMODE_ACTIVE);
       await this.sendSetDeviceOneParam(PARAM_SCAN_AREA, SCANAREA_EPC);
       await this.sendSetDeviceOneParam(PARAM_BEEP_ENABLE, this.beepEnabled ? 0x01 : 0x00);
 
-      this.startPolling();
+      this.startUsbPolling();
     }
 
     findReaderInterface(device) {
@@ -181,7 +267,17 @@
     }
 
     async sendHidFeatureInit() {
-      if (this.interfaceNumber == null) return;
+      if (!this.device || this.transport !== 'hid') return;
+      const data = new Uint8Array([0xFF, 0xC7, 0x83, 0xCC, 0x30, 0x00]);
+      try {
+        await this.device.sendFeatureReport(0, data);
+      } catch (err) {
+        console.warn('HID feature init:', err);
+      }
+    }
+
+    async sendUsbHidFeatureInit() {
+      if (!this.device || this.transport !== 'usb' || this.interfaceNumber == null) return;
       const data = new Uint8Array([0x00, 0xFF, 0xC7, 0x83, 0xCC, 0x30, 0x00]);
       try {
         await this.device.controlTransferOut({
@@ -192,45 +288,60 @@
           index: this.interfaceNumber,
         }, data);
       } catch (err) {
-        console.warn('HID feature init:', err);
+        console.warn('USB HID feature init:', err);
       }
     }
 
     async sendSetDeviceOneParam(paramAddr, value) {
-      if (!this.device || this.epOut == null) return;
       const frame = wrapOut(buildSetDeviceOneParamSw(paramAddr, value), this.outFraming);
-      const tx = padToOutPacketSize(frame, this.outPacketSize);
-      await this.device.transferOut(this.epOut, tx);
+      const tx = padToPacketSize(frame, this.outPacketSize);
+
+      if (this.transport === 'hid') {
+        const reportId = hidReportId(tx);
+        const payload = hidReportPayload(tx);
+        await this.device.sendReport(reportId, payload);
+        return;
+      }
+
+      if (this.device && this.epOut != null) {
+        await this.device.transferOut(this.epOut, tx);
+      }
     }
 
-    startPolling() {
-      this.stopPolling();
+    startUsbPolling() {
+      this.stopUsbPolling();
       this.polling = true;
-      this.schedulePoll();
+      this.scheduleUsbPoll();
     }
 
-    schedulePoll() {
+    scheduleUsbPoll() {
       if (!this.polling) return;
-      this.pollTimer = setTimeout(() => this.pollOnce(), POLL_MS);
+      this.pollTimer = setTimeout(() => this.pollUsbOnce(), POLL_MS);
     }
 
-    async pollOnce() {
-      if (!this.polling || !this.device || this.epIn == null) return;
+    async pollUsbOnce() {
+      if (!this.polling || this.transport !== 'usb' || !this.device || this.epIn == null) return;
       try {
         const result = await this.device.transferIn(this.epIn, 64);
         if (result.data && result.data.byteLength > 0) {
           const buf = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
           const framing = detectFramingFromIn(buf);
           if (framing) this.outFraming = framing;
-          const tag = extractTagHexFromCt45(buf);
+          const tag = parseTagFromBuffer(buf);
           if (tag) this.emitTag(tag);
         }
       } catch (err) {
-        if (this.polling) {
-          console.warn('USB poll error:', err);
-        }
+        if (this.polling) console.warn('USB poll error:', err);
       } finally {
-        this.schedulePoll();
+        this.scheduleUsbPoll();
+      }
+    }
+
+    stopUsbPolling() {
+      this.polling = false;
+      if (this.pollTimer) {
+        clearTimeout(this.pollTimer);
+        this.pollTimer = null;
       }
     }
 
@@ -244,19 +355,18 @@
       this.onTag(tagHex);
     }
 
-    stopPolling() {
-      this.polling = false;
-      if (this.pollTimer) {
-        clearTimeout(this.pollTimer);
-        this.pollTimer = null;
-      }
-    }
-
     async disconnect() {
-      this.stopPolling();
+      this.stopUsbPolling();
+      if (this.device && this.inputHandler) {
+        try {
+          this.device.removeEventListener('inputreport', this.inputHandler);
+        } catch (_) {}
+      }
+      this.inputHandler = null;
+
       if (this.device) {
         try {
-          if (this.device.opened && this.interfaceNumber != null) {
+          if (this.transport === 'usb' && this.device.opened && this.interfaceNumber != null) {
             await this.device.releaseInterface(this.interfaceNumber);
           }
         } catch (_) {}
@@ -264,20 +374,36 @@
           if (this.device.opened) await this.device.close();
         } catch (_) {}
       }
+
       this.device = null;
+      this.transport = null;
       this.interfaceNumber = null;
       this.epIn = null;
       this.epOut = null;
     }
 
     async reconnectKnownDevice() {
-      if (!UhfUsbReader.isSupported()) return false;
-      const devices = await navigator.usb.getDevices();
-      const known = devices.find((d) => d.vendorId === VENDOR_ID && d.productId === PRODUCT_ID);
-      if (!known) return false;
+      if (UhfUsbReader.isHidSupported()) {
+        const hidDevices = await navigator.hid.getDevices();
+        const hidKnown = hidDevices.find((d) => d.vendorId === VENDOR_ID && d.productId === PRODUCT_ID);
+        if (hidKnown) {
+          try {
+            await this.openHidDevice(hidKnown);
+            this.onStatus('Đã kết nối lại đầu đọc (WebHID)');
+            return true;
+          } catch (err) {
+            console.warn('HID reconnect failed:', err);
+          }
+        }
+      }
+
+      if (!UhfUsbReader.isUsbSupported()) return false;
+      const usbDevices = await navigator.usb.getDevices();
+      const usbKnown = usbDevices.find((d) => d.vendorId === VENDOR_ID && d.productId === PRODUCT_ID);
+      if (!usbKnown) return false;
       try {
-        await this.openDevice(known);
-        this.onStatus('Đã kết nối lại đầu đọc USB');
+        await this.openUsbDevice(usbKnown);
+        this.onStatus('Đã kết nối lại đầu đọc (WebUSB)');
         return true;
       } catch (err) {
         this.onError(err.message || 'Không kết nối lại được');

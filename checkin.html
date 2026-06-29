@@ -114,13 +114,9 @@
             font-weight: 600;
         }
 
-        .pill-link {
-            text-decoration: none;
-            transition: background 0.2s;
-        }
-
-        .pill-link:hover {
-            background: rgba(255,255,255,0.4);
+        .pill-checkin {
+            background: rgba(39, 174, 96, 0.25);
+            border-color: rgba(255, 255, 255, 0.95);
         }
 
         .event-picker-wrap {
@@ -624,7 +620,7 @@
             <p class="subtitle">Quét mã QR trên email đăng ký để tra cứu thông tin vận động viên</p>
             <div class="meta-bar">
                 <span class="pill" id="athlete-count">Đang tải...</span>
-                <a href="index.html" id="results-link" class="pill pill-link" style="display:none;">Xem kết quả</a>
+                <span class="pill pill-checkin" id="checkin-count">Đã nhận BIB: —</span>
             </div>
             <div id="event-picker-wrap" class="event-picker-wrap" style="display:none;">
                 <label class="event-picker-label" for="event-picker">Chọn giải</label>

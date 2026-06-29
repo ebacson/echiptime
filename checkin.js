@@ -563,6 +563,27 @@
     const idx = allAthletes.findIndex((a) => a.firebaseKey === key);
     if (idx >= 0) allAthletes[idx] = { ...allAthletes[idx], ...payload };
     bibAliases(athlete.bib).forEach((b) => athletesByBib.set(b, athlete));
+    updateMetaCounts();
+  }
+
+  function countReceivedBibs() {
+    return allAthletes.filter((a) => getAthleteCheckIn(a).received).length;
+  }
+
+  function updateMetaCounts() {
+    const countEl = document.getElementById('athlete-count');
+    const checkinEl = document.getElementById('checkin-count');
+    const total = allAthletes.length;
+    const received = countReceivedBibs();
+
+    if (countEl) {
+      countEl.textContent = total ? `${total} VĐV` : '0 VĐV';
+    }
+    if (checkinEl) {
+      checkinEl.textContent = total
+        ? `Đã nhận BIB: ${received}/${total}`
+        : 'Đã nhận BIB: —';
+    }
   }
 
   function bibAliases(bib) {
@@ -1088,22 +1109,9 @@
     const titleEl = document.getElementById('event-title');
     if (titleEl) titleEl.textContent = title;
 
-    const countEl = document.getElementById('athlete-count');
-    if (countEl) {
-      countEl.textContent = allAthletes.length ? `${allAthletes.length} VĐV` : '0 VĐV';
-    }
+    updateMetaCounts();
 
     updateFirebasePathLabel();
-
-    const resultsLink = document.getElementById('results-link');
-    if (resultsLink && activeContext.eventKey && !activeContext.eventKey.endsWith('.json')) {
-      const params = new URLSearchParams();
-      if (activeContext.uid) params.set('uid', activeContext.uid);
-      params.set('event', activeContext.eventKey);
-      const qs = params.toString();
-      resultsLink.href = `index.html?${qs}`;
-      resultsLink.style.display = 'inline-block';
-    }
 
     showLoading(false);
 

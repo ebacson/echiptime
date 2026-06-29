@@ -81,44 +81,11 @@
             filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25));
         }
 
-        h1 {
-            color: white;
-            font-size: 1.6rem;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.25);
-            margin-bottom: 6px;
-        }
-
         .subtitle {
             color: rgba(255,255,255,0.95);
             font-size: 0.95rem;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
-        }
-
-        .meta-bar {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            justify-content: center;
-            align-items: center;
-            margin-top: 10px;
-        }
-
-        .pill {
-            display: inline-block;
-            padding: 6px 14px;
-            border-radius: 20px;
-            background: rgba(255,255,255,0.25);
-            border: 2px solid white;
-            color: white;
-            font-size: 0.88rem;
-            font-weight: 600;
-        }
-
-        .pill-checkin {
-            background: #27ae60;
-            border-color: #1e8449;
-            color: white;
-            box-shadow: 0 2px 8px rgba(39, 174, 96, 0.35);
+            margin-top: 4px;
         }
 
         .stats-card {
@@ -699,7 +666,6 @@
         }
 
         @media (max-width: 480px) {
-            h1 { font-size: 1.35rem; }
             .bib-badge { font-size: 1.5rem; }
             .manual-form { flex-direction: column; }
             .info-row { flex-direction: column; gap: 4px; }
@@ -711,12 +677,7 @@
     <div class="container">
         <header class="header">
             <img src="echiptime_logo.png" alt="eChipTime" class="header-logo" onerror="this.style.display='none'">
-            <h1 id="event-title">Quét BIB VĐV</h1>
             <p class="subtitle">Quét mã QR trên email đăng ký để tra cứu thông tin vận động viên</p>
-            <div class="meta-bar">
-                <span class="pill" id="athlete-count">Đang tải...</span>
-                <span class="pill pill-checkin" id="checkin-count">Đã nhận BIB: 0</span>
-            </div>
             <div id="event-picker-wrap" class="event-picker-wrap" style="display:none;">
                 <label class="event-picker-label" for="event-picker">Chọn giải</label>
                 <select id="event-picker" class="event-picker"></select>
@@ -730,11 +691,11 @@
         <section class="card stats-card" id="stats-card" aria-label="Thống kê nhận BIB">
             <div class="stats-grid">
                 <div class="stats-box">
-                    <div class="stats-number" id="stat-total">0</div>
+                    <div class="stats-number" id="stat-total">…</div>
                     <div class="stats-label">Tổng VĐV</div>
                 </div>
                 <div class="stats-box received">
-                    <div class="stats-number" id="stat-received">0</div>
+                    <div class="stats-number" id="stat-received">…</div>
                     <div class="stats-label">Đã nhận BIB</div>
                 </div>
             </div>
@@ -791,6 +752,6 @@
         </div>
     </div>
 
-    <script src="checkin.js?v=2"></script>
+    <script src="checkin.js?v=3"></script>
 </body>
 </html>

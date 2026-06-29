@@ -126,8 +126,7 @@
     } catch (err) {
       firebaseLoadState = 'error';
       showLoading(false);
-      const countEl = document.getElementById('athlete-count');
-      if (countEl) countEl.textContent = 'Lỗi tải';
+      updateMetaCounts();
       showStatus(err.message || 'Lỗi tải dữ liệu', 'error');
       console.error(err);
     }
@@ -597,24 +596,22 @@
   }
 
   function updateMetaCounts() {
-    const countEl = document.getElementById('athlete-count');
-    const checkinEl = document.getElementById('checkin-count');
     const statTotal = document.getElementById('stat-total');
     const statReceived = document.getElementById('stat-received');
     const total = allAthletes.length;
     const received = countReceivedBibs();
+    const loading = firebaseLoadState === 'loading';
+    const errored = firebaseLoadState === 'error';
 
-    if (countEl) {
-      countEl.textContent = total ? `${total} VĐV` : '0 VĐV';
-    }
-    if (checkinEl) {
-      checkinEl.textContent = `Đã nhận BIB: ${received}${total ? `/${total}` : ''}`;
-    }
     if (statTotal) {
-      statTotal.textContent = total ? String(total) : '0';
+      if (loading) statTotal.textContent = '…';
+      else if (errored) statTotal.textContent = '—';
+      else statTotal.textContent = String(total);
     }
     if (statReceived) {
-      statReceived.textContent = total ? `${received}/${total}` : '0';
+      if (loading) statReceived.textContent = '…';
+      else if (errored) statReceived.textContent = '—';
+      else statReceived.textContent = total ? `${received}/${total}` : String(received);
     }
   }
 
@@ -1145,10 +1142,7 @@
     allAthletes = indexed.list;
 
     const title = getEventDisplayName(data, displayHint || eventKey);
-    document.title = `Quét BIB — ${title}`;
-
-    const titleEl = document.getElementById('event-title');
-    if (titleEl) titleEl.textContent = title;
+    document.title = `Check-in BIB — ${title}`;
 
     updateMetaCounts();
 
@@ -1188,8 +1182,7 @@
     activeContext = { uid: uid || '', eventKey, dbPath };
     updateFirebasePathLabel();
 
-    const countEl = document.getElementById('athlete-count');
-    if (countEl) countEl.textContent = 'Đang tải...';
+    updateMetaCounts();
 
     const dataRef = window.firebaseRef(window.firebaseDatabase, dbPath);
 
@@ -1375,8 +1368,7 @@
     } catch (err) {
       firebaseLoadState = 'error';
       showLoading(false);
-      const countEl = document.getElementById('athlete-count');
-      if (countEl) countEl.textContent = 'Lỗi tải';
+      updateMetaCounts();
       showStatus(err.message || 'Lỗi tải dữ liệu', 'error');
       console.error(err);
     }

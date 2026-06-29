@@ -19,6 +19,10 @@
   let firebaseValueUnsubscribe = null;
   let discoveredEvents = [];
   let authListenerAttached = false;
+  let pendingCheckInPhoto = null;
+
+  const CHECKIN_MAX_IMAGE_WIDTH = 800;
+  const CHECKIN_JPEG_QUALITY = 0.72;
 
   function getAuthUid() {
     return (window.authCurrentUser && window.authCurrentUser.uid) ? window.authCurrentUser.uid : '';
@@ -377,7 +381,188 @@
       phone: pickField(raw, ['phone', 'Phone', 'PHONE']),
       personalId: pickField(raw, ['personalId', 'PersonalId', 'personalID']),
       uid: pickField(raw, ['uid', 'Uid', 'UID']),
+      status: pickField(raw, ['status', 'Status']),
+      image_checkin: pickField(raw, ['image_checkin', 'imageCheckin', 'checkInImageBase64']),
+      checkInAt: pickField(raw, ['checkInAt', 'checkedInAt']),
+      checkInBy: pickField(raw, ['checkInBy', 'checkedInBy']),
     };
+  }
+
+  function formatCheckInTimestamp(date) {
+    const d = date || new Date();
+    const pad = (n, w) => String(n).padStart(w, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}:${pad(d.getMilliseconds(), 3)}`;
+  }
+
+  function toImageDataUrl(base64OrDataUrl) {
+    const s = String(base64OrDataUrl || '').trim();
+    if (!s) return '';
+    if (s.startsWith('data:image/')) return s;
+    return `data:image/jpeg;base64,${s}`;
+  }
+
+  function stripBase64Prefix(dataUrl) {
+    return String(dataUrl || '').replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '');
+  }
+
+  function getAthleteCheckIn(athlete) {
+    const status = athlete.status || '';
+    const image = athlete.image_checkin || '';
+    const at = athlete.checkInAt || '';
+    const by = athlete.checkInBy || '';
+    const received = /received|checked|đã nhận/i.test(status) || !!image;
+    return { status, image, at, by, received };
+  }
+
+  function compressImageToBase64(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxSide = Math.max(img.width, img.height);
+          const scale = maxSide > CHECKIN_MAX_IMAGE_WIDTH ? CHECKIN_MAX_IMAGE_WIDTH / maxSide : 1;
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Không thể xử lý ảnh'));
+            return;
+          }
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', CHECKIN_JPEG_QUALITY));
+        };
+        img.onerror = () => reject(new Error('Không đọc được ảnh'));
+        img.src = e.target.result;
+      };
+      reader.onerror = () => reject(new Error('Không đọc được file ảnh'));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function renderCheckInSection(athlete) {
+    if (getQueryParams().fixture) return '';
+
+    const ci = getAthleteCheckIn(athlete);
+    const previewSrc = pendingCheckInPhoto || (ci.image ? toImageDataUrl(ci.image) : '');
+    const previewHtml = previewSrc
+      ? `<img src="${previewSrc}" class="checkin-preview" alt="Ảnh nhận BIB">`
+      : '<div class="checkin-preview-placeholder">Chưa có ảnh — chụp trước khi xác nhận</div>';
+
+    const statusHtml = ci.received && !pendingCheckInPhoto
+      ? `<p class="checkin-done">✓ Đã nhận BIB${ci.at ? ` — ${escapeHtml(ci.at)}` : ''}${ci.by ? ` (${escapeHtml(ci.by)})` : ''}</p>`
+      : '';
+
+    const canConfirm = !!previewSrc;
+
+    return `
+      <div class="checkin-section">
+        <h3>Xác nhận nhận BIB</h3>
+        ${statusHtml}
+        ${previewHtml}
+        <label class="btn btn-secondary btn-block file-label">
+          Chụp ảnh người nhận BIB
+          <input type="file" class="checkin-photo-input" accept="image/*" capture="user">
+        </label>
+        <button type="button" class="btn btn-success btn-block checkin-confirm-btn" ${canConfirm ? '' : 'disabled'}>
+          Xác nhận đã nhận BIB
+        </button>
+      </div>`;
+  }
+
+  function bindCheckInEvents(card, athlete) {
+    const section = card.querySelector('.checkin-section');
+    if (!section) return;
+
+    const fileInput = section.querySelector('.checkin-photo-input');
+    const confirmBtn = section.querySelector('.checkin-confirm-btn');
+    const previewBox = section.querySelector('.checkin-preview, .checkin-preview-placeholder');
+
+    if (fileInput) {
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = '';
+        if (!file) return;
+        try {
+          showStatus('Đang xử lý ảnh...', 'info');
+          pendingCheckInPhoto = await compressImageToBase64(file);
+          if (previewBox) {
+            const img = document.createElement('img');
+            img.src = pendingCheckInPhoto;
+            img.className = 'checkin-preview';
+            img.alt = 'Ảnh nhận BIB';
+            previewBox.replaceWith(img);
+          }
+          if (confirmBtn) confirmBtn.disabled = false;
+          showStatus('Đã chụp ảnh — nhấn xác nhận để lưu', 'info');
+        } catch (err) {
+          showStatus(err.message || 'Không xử lý được ảnh', 'error');
+        }
+      });
+    }
+
+    if (confirmBtn) {
+      confirmBtn.addEventListener('click', async () => {
+        const imageData = pendingCheckInPhoto || toImageDataUrl(getAthleteCheckIn(athlete).image);
+        if (!imageData) {
+          showStatus('Vui lòng chụp ảnh trước khi xác nhận', 'error');
+          return;
+        }
+        if (!getAuthUid()) {
+          showStatus('Cần đăng nhập để lưu xác nhận nhận BIB', 'error');
+          return;
+        }
+        confirmBtn.disabled = true;
+        const oldText = confirmBtn.textContent;
+        confirmBtn.textContent = 'Đang lưu...';
+        try {
+          await saveCheckInToFirebase(athlete, imageData);
+          pendingCheckInPhoto = null;
+          renderAthleteCard(athlete);
+          showStatus(`Đã xác nhận nhận BIB ${athlete.bib}`, 'success');
+          if (navigator.vibrate) navigator.vibrate(100);
+        } catch (err) {
+          showStatus(err.message || 'Lưu thất bại', 'error');
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = oldText;
+          console.error('check-in save error:', err);
+        }
+      });
+    }
+  }
+
+  async function saveCheckInToFirebase(athlete, imageDataUrl) {
+    if (!window.firebaseUpdate || !window.firebaseRef || !window.firebaseDatabase) {
+      throw new Error('Chưa kết nối máy chủ');
+    }
+    if (!activeContext.dbPath) throw new Error('Chưa chọn giải');
+    const key = athlete.firebaseKey;
+    if (!key) throw new Error('Không xác định được VĐV');
+
+    const base64 = stripBase64Prefix(imageDataUrl);
+    if (!base64) throw new Error('Ảnh không hợp lệ');
+    if (base64.length > 900000) {
+      throw new Error('Ảnh quá lớn. Thử chụp lại gần hơn hoặc đủ sáng.');
+    }
+
+    const payload = {
+      status: 'received',
+      image_checkin: base64,
+      checkInAt: formatCheckInTimestamp(new Date()),
+      checkInBy: (window.authCurrentUser && window.authCurrentUser.email) || getAuthUid(),
+    };
+
+    const path = `${activeContext.dbPath}/Athletes/${key}`;
+    const dataRef = window.firebaseRef(window.firebaseDatabase, path);
+    await window.firebaseUpdate(dataRef, payload);
+
+    Object.assign(athlete, payload);
+    const idx = allAthletes.findIndex((a) => a.firebaseKey === key);
+    if (idx >= 0) allAthletes[idx] = { ...allAthletes[idx], ...payload };
+    bibAliases(athlete.bib).forEach((b) => athletesByBib.set(b, athlete));
   }
 
   function bibAliases(bib) {
@@ -557,6 +742,7 @@
   }
 
   function renderAthleteCard(athlete) {
+    pendingCheckInPhoto = null;
     const bib = normalizeBib(athlete.bib);
     const isTeam = bib.endsWith('-T');
     const members = isTeam ? findTeamMembers(bib) : [];
@@ -604,9 +790,12 @@
       <div class="bib-badge">${escapeHtml(bib)}</div>
       <h2 class="athlete-name">${escapeHtml(athlete.name || '—')}</h2>
       <div class="info-grid">${rows}</div>
-      ${membersHtml}`;
+      ${membersHtml}
+      ${renderCheckInSection(athlete)}`;
     card.classList.add('visible');
     card.classList.remove('error');
+
+    bindCheckInEvents(card, athlete);
 
     const empty = document.getElementById('empty-state');
     if (empty) empty.style.display = 'none';
@@ -1034,6 +1223,7 @@
     if (rescanBtn) {
       rescanBtn.addEventListener('click', () => {
         lastScannedBib = '';
+        pendingCheckInPhoto = null;
         const card = document.getElementById('athlete-card');
         if (card) {
           card.classList.remove('visible');
@@ -1111,7 +1301,7 @@
       let tries = 0;
       const t = setInterval(() => {
         tries += 1;
-        if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet && window.firebaseSignIn) {
+        if (window.firebaseDatabase && window.firebaseRef && window.firebaseGet && window.firebaseSignIn && window.firebaseUpdate) {
           clearInterval(t);
           resolve();
         } else if (tries > 50) {

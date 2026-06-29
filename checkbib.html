@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Đọc tag BIB</title>
+    <link rel="icon" type="image/x-icon" href="echiptime.ico">
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getDatabase, ref, get, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+        import {
+            getAuth,
+            signInWithEmailAndPassword,
+            signOut,
+            onAuthStateChanged
+        } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyAiCvMlAAC3q87a7MEFLl3XDv0pkdkK93o",
+            authDomain: "realtime-echiptime.firebaseapp.com",
+            databaseURL: "https://realtime-echiptime-default-rtdb.firebaseio.com",
+            projectId: "realtime-echiptime",
+            storageBucket: "realtime-echiptime.firebasestorage.app",
+            messagingSenderId: "69244922788",
+            appId: "1:69244922788:web:c0a97507e0addad6286f31",
+            measurementId: "G-ECTTVR1X75"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const database = getDatabase(app);
+
+        window.firebaseAuth = auth;
+        window.firebaseSignIn = (email, password) => signInWithEmailAndPassword(auth, email, password);
+        window.firebaseSignOut = () => signOut(auth);
+        window.authCurrentUser = null;
+        window.firebaseAuthReady = false;
+
+        onAuthStateChanged(auth, (user) => {
+            window.authCurrentUser = user;
+            window.firebaseAuthReady = true;
+            if (typeof window.onAuthStateReady === 'function') {
+                window.onAuthStateReady(user);
+            }
+        });
+
+        window.firebaseDatabase = database;
+        window.firebaseRef = ref;
+        window.firebaseGet = get;
+        window.firebaseOnValue = onValue;
+    </script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #cce5ff 0%, #b3d9ff 100%);
+            min-height: 100vh;
+            padding: 12px;
+            color: #333;
+        }
+
+        .container { max-width: 720px; margin: 0 auto; }
+
+        .header { text-align: center; margin-bottom: 20px; }
+
+        .header-logo {
+            max-width: 220px;
+            width: 100%;
+            height: auto;
+            margin: 0 auto 12px;
+            filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25));
+        }
+
+        .subtitle {
+            color: rgba(255,255,255,0.95);
+            font-size: 0.95rem;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+        }
+
+        .stats-card { margin-bottom: 16px; padding: 16px 18px; }
+
+        .stats-single {
+            text-align: center;
+            padding: 12px 8px;
+            border-radius: 12px;
+            background: #f0f7ff;
+            border: 2px solid #c5dfff;
+        }
+
+        .stats-number {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: #1a5fb4;
+            line-height: 1.2;
+        }
+
+        .stats-label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 4px;
+            font-weight: 600;
+        }
+
+        .event-picker-wrap { text-align: center; margin-top: 10px; width: 100%; }
+
+        .event-picker-label {
+            display: block;
+            color: rgba(255,255,255,0.95);
+            font-size: 0.88rem;
+            margin-bottom: 6px;
+        }
+
+        .event-picker {
+            width: 100%;
+            max-width: 420px;
+            padding: 8px 14px;
+            border-radius: 20px;
+            border: 2px solid white;
+            background: rgba(255, 255, 255, 0.95);
+            font-size: 0.95rem;
+        }
+
+        .user-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .user-email {
+            color: white;
+            font-size: 0.88rem;
+            font-weight: 600;
+            background: rgba(255,255,255,0.2);
+            border: 2px solid white;
+            border-radius: 20px;
+            padding: 6px 14px;
+            max-width: 100%;
+            word-break: break-all;
+        }
+
+        .btn-logout {
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 2px solid white;
+            background: rgba(255,255,255,0.15);
+            color: white;
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        #main-app.hidden { display: none; }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .reader-card h2 {
+            font-size: 1.1rem;
+            color: #1a5fb4;
+            margin-bottom: 12px;
+        }
+
+        .reader-status-box {
+            background: #f5f9ff;
+            border: 2px solid #c5dfff;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+            text-align: center;
+        }
+
+        .reader-status {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .reader-status.connected { color: #1e7e45; }
+        .reader-status.error { color: #c0392b; }
+        .reader-status.info { color: #1a5fb4; }
+
+        .last-tag-row {
+            margin-top: 8px;
+            font-size: 0.88rem;
+            color: #666;
+        }
+
+        .last-tag-row strong {
+            color: #1a5fb4;
+            font-family: ui-monospace, monospace;
+            word-break: break-all;
+        }
+
+        .reader-hint {
+            color: #888;
+            font-size: 0.88rem;
+            line-height: 1.45;
+            margin-bottom: 14px;
+        }
+
+        .btn-block { width: 100%; margin-bottom: 10px; }
+
+        .manual-form {
+            display: flex;
+            gap: 8px;
+            margin-top: 14px;
+        }
+
+        .manual-form input {
+            flex: 1;
+            padding: 12px 14px;
+            border: 2px solid #c5dfff;
+            border-radius: 12px;
+            font-size: 1rem;
+            outline: none;
+            font-family: ui-monospace, monospace;
+        }
+
+        .manual-form input:focus { border-color: #1a5fb4; }
+
+        .btn {
+            padding: 12px 18px;
+            border: none;
+            border-radius: 12px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            background: #1a5fb4;
+            color: white;
+            box-shadow: 0 4px 12px rgba(26,95,180,0.35);
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #555;
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .status-message {
+            margin-top: 12px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 0.92rem;
+            display: none;
+        }
+
+        .status-message.info { background: #eef6ff; color: #1a5fb4; border: 1px solid #c5dfff; }
+        .status-message.success { background: #e8f8ef; color: #1e7e45; border: 1px solid #b8e6c8; }
+        .status-message.error { background: #fff0f0; color: #c0392b; border: 1px solid #f5c6c6; }
+
+        .auth-card h2 { font-size: 1.1rem; color: #1a5fb4; margin-bottom: 8px; }
+        .auth-card p { color: #666; font-size: 0.9rem; margin-bottom: 14px; line-height: 1.45; }
+        .auth-form { display: grid; gap: 10px; }
+        .auth-form input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid #c5dfff;
+            border-radius: 12px;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        #loading {
+            text-align: center;
+            padding: 24px;
+            color: white;
+            font-weight: 600;
+        }
+
+        .spinner {
+            width: 36px;
+            height: 36px;
+            border: 4px solid rgba(255,255,255,0.35);
+            border-top-color: white;
+            border-radius: 50%;
+            margin: 0 auto 12px;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #empty-state { text-align: center; padding: 24px 12px; color: #999; }
+        #empty-state .icon { font-size: 2.5rem; margin-bottom: 10px; }
+
+        .athlete-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .bib-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #1a5fb4, #3584e4);
+            color: white;
+            font-size: 1.8rem;
+            font-weight: 800;
+            padding: 10px 24px;
+            border-radius: 14px;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 14px rgba(26,95,180,0.35);
+        }
+
+        .received-badge {
+            display: inline-block;
+            background: #27ae60;
+            color: white;
+            font-size: 1rem;
+            font-weight: 700;
+            padding: 10px 18px;
+            border-radius: 14px;
+        }
+
+        .athlete-name {
+            font-size: 1.5rem;
+            color: #222;
+            margin-bottom: 18px;
+            line-height: 1.3;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .info-label { color: #888; font-size: 0.9rem; flex-shrink: 0; }
+        .field-value { text-align: right; font-weight: 600; word-break: break-word; }
+        .field-link { color: #1a5fb4; text-decoration: none; font-weight: 600; }
+
+        .team-members { margin-top: 16px; }
+        .team-members h3 { font-size: 1rem; color: #1a5fb4; margin-bottom: 10px; }
+        .team-members ul { list-style: none; }
+        .team-members li {
+            padding: 10px 12px;
+            background: #f0f7ff;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        .not-found { text-align: center; padding: 20px 10px; }
+        .not-found-icon {
+            width: 64px;
+            height: 64px;
+            line-height: 64px;
+            border-radius: 50%;
+            background: #fff0f0;
+            color: #e74c3c;
+            font-size: 2rem;
+            font-weight: 800;
+            margin: 0 auto 14px;
+        }
+
+        #athlete-card.error .bib-badge {
+            background: linear-gradient(135deg, #e74c3c, #ff8a80);
+        }
+
+        @media (max-width: 480px) {
+            .bib-badge { font-size: 1.5rem; }
+            .manual-form { flex-direction: column; }
+            .info-row { flex-direction: column; gap: 4px; }
+            .field-value { text-align: left; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <img src="echiptime_logo.png" alt="eChipTime" class="header-logo" onerror="this.style.display='none'">
+            <p class="subtitle">Đọc tag RFID trên BIB để tra cứu thông tin vận động viên</p>
+            <div id="event-picker-wrap" class="event-picker-wrap" style="display:none;">
+                <label class="event-picker-label" for="event-picker">Chọn giải</label>
+                <select id="event-picker" class="event-picker"></select>
+            </div>
+            <div id="user-bar" class="user-bar" style="display:none;">
+                <span class="user-email" id="user-email"></span>
+                <button type="button" id="logout-btn" class="btn-logout">Đăng xuất</button>
+            </div>
+        </header>
+
+        <section class="card stats-card" aria-label="Thống kê">
+            <div class="stats-single">
+                <div class="stats-number" id="stat-total">…</div>
+                <div class="stats-label">Tổng VĐV</div>
+            </div>
+        </section>
+
+        <section id="auth-panel" class="card auth-card" style="display:none;">
+            <h2>Đăng nhập BTC</h2>
+            <p>Liên hệ Admin để có email và mật khẩu đăng nhập.</p>
+            <form id="login-form" class="auth-form">
+                <input type="email" id="login-email" placeholder="Email" autocomplete="username" required>
+                <input type="password" id="login-password" placeholder="Mật khẩu" autocomplete="current-password" required>
+                <button type="submit" class="btn btn-primary btn-block" id="login-btn">Đăng nhập</button>
+            </form>
+            <div id="auth-error" class="status-message error" style="display:none;"></div>
+        </section>
+
+        <div id="main-app">
+            <div id="loading">
+                <div class="spinner"></div>
+                Đang tải danh sách vận động viên...
+            </div>
+
+            <section class="card reader-card">
+                <h2>Đầu đọc tag USB</h2>
+                <div class="reader-status-box">
+                    <div class="reader-status idle" id="reader-status">Chưa kết nối</div>
+                    <div class="last-tag-row">Tag gần nhất: <strong id="last-tag">—</strong></div>
+                </div>
+                <p class="reader-hint">
+                    Dùng <strong>Chrome hoặc Edge trên máy tính</strong>, cắm đầu đọc UHF qua USB, nhấn kết nối và đưa tag trên BIB vào vùng đọc.
+                </p>
+                <button type="button" id="connect-usb-btn" class="btn btn-primary btn-block">Kết nối đầu đọc USB</button>
+                <button type="button" id="disconnect-usb-btn" class="btn btn-danger btn-block" style="display:none;">Ngắt kết nối</button>
+                <form id="manual-tag-form" class="manual-form">
+                    <input type="text" id="manual-tag" placeholder="Tag ID (vd: A0000009)" autocomplete="off">
+                    <button type="submit" class="btn btn-primary">Tra cứu</button>
+                </form>
+                <div id="status-message" class="status-message"></div>
+            </section>
+
+            <section class="card">
+                <div id="empty-state">
+                    <div class="icon">🏷️</div>
+                    <p>Chưa đọc tag nào.<br>Kết nối đầu đọc USB hoặc nhập Tag ID thủ công.</p>
+                </div>
+                <div id="athlete-card"></div>
+                <button type="button" id="clear-btn" class="btn btn-secondary">Xóa kết quả</button>
+            </section>
+        </div>
+    </div>
+
+    <script src="checkbib-reader.js"></script>
+    <script src="checkbib.js?v=1"></script>
+</body>
+</html>

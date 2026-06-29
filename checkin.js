@@ -419,11 +419,11 @@
   }
 
   function getAthleteCheckIn(athlete) {
-    const status = athlete.status || '';
+    const status = athlete.status != null ? String(athlete.status).trim() : '';
     const image = athlete.image_checkin || '';
     const at = athlete.checkInAt || '';
     const by = athlete.checkInBy || '';
-    const received = /received|checked|đã nhận/i.test(status) || !!image;
+    const received = /received|checked|đã nhận|true|1|yes|ok/i.test(status) || !!image;
     return { status, image, at, by, received };
   }
 
@@ -465,24 +465,37 @@
       ? `<img src="${previewSrc}" class="checkin-preview" alt="Ảnh nhận BIB">`
       : '<div class="checkin-preview-placeholder">Chưa có ảnh — chụp trước khi xác nhận</div>';
 
-    const statusHtml = ci.received && !pendingCheckInPhoto
-      ? `<p class="checkin-done">✓ Đã nhận BIB${ci.at ? ` — ${escapeHtml(ci.at)}` : ''}${ci.by ? ` (${escapeHtml(ci.by)})` : ''}</p>`
+    const alreadyReceived = ci.received && !pendingCheckInPhoto;
+
+    const statusHtml = alreadyReceived
+      ? `<div class="checkin-received-banner">
+          <span class="checkin-received-icon">✓</span>
+          <div>
+            <strong>Đã nhận BIB</strong>
+            ${ci.at ? `<div class="checkin-received-meta">${escapeHtml(ci.at)}</div>` : ''}
+            ${ci.by ? `<div class="checkin-received-meta">BTC: ${escapeHtml(ci.by)}</div>` : ''}
+          </div>
+        </div>`
       : '';
 
-    const canConfirm = !!previewSrc;
+    const canConfirm = !!previewSrc && !alreadyReceived;
 
-    return `
-      <div class="checkin-section">
-        <h3>Xác nhận nhận BIB</h3>
-        ${statusHtml}
-        ${previewHtml}
-        <label class="btn btn-secondary btn-block file-label">
+    const actionsHtml = alreadyReceived
+      ? ''
+      : `<label class="btn btn-secondary btn-block file-label">
           Chụp ảnh người nhận BIB
           <input type="file" class="checkin-photo-input" accept="image/*" capture="user">
         </label>
         <button type="button" class="btn btn-success btn-block checkin-confirm-btn" ${canConfirm ? '' : 'disabled'}>
           Xác nhận đã nhận BIB
-        </button>
+        </button>`;
+
+    return `
+      <div class="checkin-section">
+        <h3>${alreadyReceived ? 'Trạng thái nhận BIB' : 'Xác nhận nhận BIB'}</h3>
+        ${statusHtml}
+        ${previewHtml}
+        ${actionsHtml}
       </div>`;
   }
 
@@ -712,12 +725,16 @@
     const card = document.getElementById('athlete-card');
     if (!card) return;
 
-    const items = athletes.map((a) => `
-      <button type="button" class="search-result-item" data-bib="${escapeHtml(normalizeBib(a.bib))}">
+    const items = athletes.map((a) => {
+      const received = getAthleteCheckIn(a).received;
+      return `
+      <button type="button" class="search-result-item${received ? ' received' : ''}" data-bib="${escapeHtml(normalizeBib(a.bib))}">
         <strong>${escapeHtml(a.bib || '—')}</strong> — ${escapeHtml(a.name || '—')}
+        ${received ? '<span class="search-received-tag">✓ Đã nhận BIB</span>' : ''}
         ${a.phone ? `<span class="member-meta">SĐT: ${escapeHtml(a.phone)}</span>` : ''}
         ${a.personalId ? `<span class="member-meta">CCCD: ${escapeHtml(a.personalId)}</span>` : ''}
-      </button>`).join('');
+      </button>`;
+    }).join('');
 
     card.innerHTML = `
       <h3 class="search-results-title">Tìm thấy ${athletes.length} VĐV — chọn để xem chi tiết</h3>
@@ -826,8 +843,13 @@
     const card = document.getElementById('athlete-card');
     if (!card) return;
 
+    const received = getAthleteCheckIn(athlete).received;
+
     card.innerHTML = `
-      <div class="bib-badge">${escapeHtml(bib)}</div>
+      <div class="athlete-badges">
+        <div class="bib-badge">${escapeHtml(bib)}</div>
+        ${received ? '<div class="received-badge">✓ Đã nhận BIB</div>' : ''}
+      </div>
       <h2 class="athlete-name">${escapeHtml(athlete.name || '—')}</h2>
       <div class="info-grid">${rows}</div>
       ${membersHtml}

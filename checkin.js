@@ -115,6 +115,7 @@
       firebaseLoadState = 'idle';
       showLoading(false);
       detachFirebaseListener();
+      updateMetaCounts();
       showStatus('Đăng nhập tài khoản BTC để tải danh sách VĐV', 'info');
       return;
     }
@@ -364,10 +365,22 @@
     return '';
   }
 
+  function readCheckInFields(raw) {
+    const nested = (raw && raw.bibCheckIn && typeof raw.bibCheckIn === 'object') ? raw.bibCheckIn : {};
+    return {
+      status: pickField(raw, ['status', 'Status']) || pickField(nested, ['status']),
+      image_checkin: pickField(raw, ['image_checkin', 'imageCheckin', 'checkInImageBase64'])
+        || pickField(nested, ['imageBase64', 'image', 'image_checkin']),
+      checkInAt: pickField(raw, ['checkInAt', 'checkedInAt']) || pickField(nested, ['checkedInAt', 'at']),
+      checkInBy: pickField(raw, ['checkInBy', 'checkedInBy']) || pickField(nested, ['checkedInBy', 'by']),
+    };
+  }
+
   function normalizeAthleteRecord(raw, firebaseKey) {
     if (!raw || typeof raw !== 'object') return null;
     const bib = pickField(raw, ['bib', 'BIB', 'Bib']);
     const tagId = pickField(raw, ['tagId', 'TagID', 'tagID', 'TagId']) || firebaseKey;
+    const checkIn = readCheckInFields(raw);
     return {
       firebaseKey,
       bib,
@@ -381,10 +394,10 @@
       phone: pickField(raw, ['phone', 'Phone', 'PHONE']),
       personalId: pickField(raw, ['personalId', 'PersonalId', 'personalID']),
       uid: pickField(raw, ['uid', 'Uid', 'UID']),
-      status: pickField(raw, ['status', 'Status']),
-      image_checkin: pickField(raw, ['image_checkin', 'imageCheckin', 'checkInImageBase64']),
-      checkInAt: pickField(raw, ['checkInAt', 'checkedInAt']),
-      checkInBy: pickField(raw, ['checkInBy', 'checkedInBy']),
+      status: checkIn.status,
+      image_checkin: checkIn.image_checkin,
+      checkInAt: checkIn.checkInAt,
+      checkInBy: checkIn.checkInBy,
     };
   }
 
@@ -573,6 +586,8 @@
   function updateMetaCounts() {
     const countEl = document.getElementById('athlete-count');
     const checkinEl = document.getElementById('checkin-count');
+    const statTotal = document.getElementById('stat-total');
+    const statReceived = document.getElementById('stat-received');
     const total = allAthletes.length;
     const received = countReceivedBibs();
 
@@ -580,9 +595,13 @@
       countEl.textContent = total ? `${total} VĐV` : '0 VĐV';
     }
     if (checkinEl) {
-      checkinEl.textContent = total
-        ? `Đã nhận BIB: ${received}/${total}`
-        : 'Đã nhận BIB: —';
+      checkinEl.textContent = `Đã nhận BIB: ${received}${total ? `/${total}` : ''}`;
+    }
+    if (statTotal) {
+      statTotal.textContent = total ? String(total) : '0';
+    }
+    if (statReceived) {
+      statReceived.textContent = total ? `${received}/${total}` : '0';
     }
   }
 
@@ -1303,6 +1322,7 @@
   async function init() {
     bindUi();
     attachAuthListener();
+    updateMetaCounts();
     showLoading(true);
 
     const waitFirebase = () => new Promise((resolve, reject) => {

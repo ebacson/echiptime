@@ -115,8 +115,52 @@
         }
 
         .pill-checkin {
-            background: rgba(39, 174, 96, 0.25);
-            border-color: rgba(255, 255, 255, 0.95);
+            background: #27ae60;
+            border-color: #1e8449;
+            color: white;
+            box-shadow: 0 2px 8px rgba(39, 174, 96, 0.35);
+        }
+
+        .stats-card {
+            margin-bottom: 16px;
+            padding: 16px 18px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            text-align: center;
+        }
+
+        .stats-box {
+            padding: 12px 8px;
+            border-radius: 12px;
+            background: #fff5fa;
+            border: 2px solid #ffd6eb;
+        }
+
+        .stats-box.received {
+            background: #e8f8ef;
+            border-color: #b8e6c8;
+        }
+
+        .stats-number {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: #ff66b3;
+            line-height: 1.2;
+        }
+
+        .stats-box.received .stats-number {
+            color: #1e7e45;
+        }
+
+        .stats-label {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 4px;
+            font-weight: 600;
         }
 
         .event-picker-wrap {
@@ -620,7 +664,7 @@
             <p class="subtitle">Quét mã QR trên email đăng ký để tra cứu thông tin vận động viên</p>
             <div class="meta-bar">
                 <span class="pill" id="athlete-count">Đang tải...</span>
-                <span class="pill pill-checkin" id="checkin-count">Đã nhận BIB: —</span>
+                <span class="pill pill-checkin" id="checkin-count">Đã nhận BIB: 0</span>
             </div>
             <div id="event-picker-wrap" class="event-picker-wrap" style="display:none;">
                 <label class="event-picker-label" for="event-picker">Chọn giải</label>
@@ -631,6 +675,19 @@
                 <button type="button" id="logout-btn" class="btn-logout">Đăng xuất</button>
             </div>
         </header>
+
+        <section class="card stats-card" id="stats-card" aria-label="Thống kê nhận BIB">
+            <div class="stats-grid">
+                <div class="stats-box">
+                    <div class="stats-number" id="stat-total">0</div>
+                    <div class="stats-label">Tổng VĐV</div>
+                </div>
+                <div class="stats-box received">
+                    <div class="stats-number" id="stat-received">0</div>
+                    <div class="stats-label">Đã nhận BIB</div>
+                </div>
+            </div>
+        </section>
 
         <section id="auth-panel" class="card auth-card" style="display:none;">
             <h2>Đăng nhập BTC</h2>
